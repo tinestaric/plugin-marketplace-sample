@@ -1,0 +1,10 @@
+// Goes in your VS Code USER settings.json (not here, and not a workspace
+// .vscode/settings.json). Always use user settings for this: it applies
+// across all your projects with one registration.
+// chat.plugins.marketplaces takes a flat array of URLs/shorthand with no
+// branch-pinning syntax, so this always tracks the repository's default branch.
+{
+  "chat.plugins.marketplaces": [
+    "your-org/plugin-marketplace-sample"
+  ]
+}

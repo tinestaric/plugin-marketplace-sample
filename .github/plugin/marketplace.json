@@ -1,0 +1,11 @@
+{
+  "name": "sample-marketplace",
+  "owner": { "name": "Your Org", "url": "https://github.com/your-org" },
+  "plugins": [
+    {
+      "name": "hello-plugin",
+      "source": "./plugins/hello-plugin",
+      "description": "Minimal example plugin demonstrating a skill and an agent shared between Claude Code and GitHub Copilot"
+    }
+  ]
+}

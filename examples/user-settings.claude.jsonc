@@ -1,0 +1,18 @@
+// Goes in your Claude Code USER settings at ~/.claude/settings.json (not here,
+// and not a project-level .claude/settings.json or .claude/settings.local.json).
+// Always use user settings for this: it applies across all your projects with
+// one registration, rather than every consuming project having to declare it.
+//
+// Omitting "ref" tracks this repo's default branch. To pin a specific branch
+// instead, add "ref": "<branch-name>" alongside "url" below.
+{
+  "extraKnownMarketplaces": {
+    "sample-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "your-org/plugin-marketplace-sample"
+      }
+    }
+  },
+  "enabledPlugins": { "hello-plugin@sample-marketplace": true }
+}
