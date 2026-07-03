@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "bc-code-intel": { "type": "stdio", "command": "npx", "args": ["-y", "bc-code-intelligence-mcp"] },
+    "al-symbols-mcp": { "type": "stdio", "command": "npx", "args": ["-y", "al-mcp-server"] },
+    "azure-devops": { "type": "http", "url": "https://mcp.dev.azure.com/1cfnav" },
+    "microsoft-docs": { "type": "http", "url": "https://learn.microsoft.com/api/mcp" }
+  }
+}
