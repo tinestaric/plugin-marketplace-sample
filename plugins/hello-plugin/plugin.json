@@ -2,6 +2,5 @@
   "name": "hello-plugin",
   "description": "Example plugin: one skill, one agent, shared between Copilot and Claude Code",
   "version": "0.1.0",
-  "author": { "name": "Your Org" },
-  "agents": ["./agents-copilot/hello-agent.agent.md"]
+  "author": { "name": "Your Org" }
 }
