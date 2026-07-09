@@ -43,10 +43,12 @@ Copilot extension **inside VS Code** reads every `plugin.json` in the plugin fol
 and merges them — so VS Code ended up installing both agent sets at once, duplicates
 and all.
 
-The fix is to not need two sets in the first place. `agents/hello-agent.agent.md`
-doesn't declare a restrictive tool list, so there's nothing that differs between
-platforms and nothing to duplicate. Both `plugin.json` files stay at their defaults
-(`agents/`, `skills/`), no path overrides, no per-file `agents` arrays.
+The fix is to not need two files in the first place. `agents/hello-agent.agent.md`
+still restricts its tools, `tools: [read, search, Read, Glob]`, both platforms'
+naming schemes listed together in one array. Each tool only recognizes its own
+names and ignores the rest, so Copilot resolves `read`/`search` and Claude Code
+resolves `Read`/`Glob`, from the same file. Both `plugin.json` files stay at their
+defaults (`agents/`, `skills/`), no path overrides, no per-file `agents` arrays.
 
 ## Shared, not duplicated
 
@@ -107,7 +109,8 @@ Registering the marketplace does not install the plugin by itself; it only makes
    `plugins[].name`/`source` to match.
 2. Replace `skills/hello-skill/` with your real skills (one `SKILL.md` per folder,
    flat under `skills/`).
-3. Replace `agents/hello-agent.agent.md` with your real agents. Keep the frontmatter
-   free of a restrictive `tools` list, that's what lets one file work for both
-   Copilot and Claude Code without duplicating it.
+3. Replace `agents/hello-agent.agent.md` with your real agents. If you need to
+   restrict tools, list both platforms' tool names together in one `tools` array
+   (e.g. `[read, search, Read, Glob]`) rather than forking the file, each platform
+   only picks out the names it recognizes.
 4. Update `examples/user-settings.*.jsonc` with your repo's path and plugin name.
