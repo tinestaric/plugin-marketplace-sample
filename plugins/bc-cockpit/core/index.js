@@ -5,13 +5,14 @@
 //   io.env(name) -> string | undefined               io.home, io.now()
 import { createAuth, SIGN_IN_HINT } from './auth.js'
 import { createClient } from './azdo.js'
+import { attentionItems, GLYPH } from './attention.js'
 import { buildBoard, diffBoards } from './board.js'
 import { loadConfig as loadConfigFrom } from './config.js'
-import { buildFixPrompt, getFailureDetails as getFailure } from './failure.js'
+import { buildFixPrompt, firstError, getFailureDetails as getFailure } from './failure.js'
 import { resolveLocalRepo as resolveRepo } from './repos.js'
 import { errorMessage } from './util.js'
 
-export { buildFixPrompt, diffBoards, SIGN_IN_HINT }
+export { attentionItems, buildFixPrompt, diffBoards, firstError, GLYPH, SIGN_IN_HINT }
 export { pipelineKey, prKey } from './board.js'
 
 const CACHE_KEY = 'board'
@@ -91,6 +92,7 @@ export function createCockpit(io) {
 export function emptyBoard(now, message) {
   return {
     workItems: [],
+    sprints: [],
     pullRequests: [],
     pipelines: [],
     fetchedAt: now,
@@ -99,41 +101,69 @@ export function emptyBoard(now, message) {
   }
 }
 
-/** One-line summary used by the band and the text fallback. */
-export function summarise(board) {
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+/**
+ * The one-line status: what needs the person, or "all clear". Missing results are never good news, so a load
+ * failure is said out loud and the board is never called clear while it is incomplete.
+ */
+export function summarise(board, opts) {
   if (!board) return 'loading…'
-  const failed = board.pipelines.filter(p => p.state === 'failed').length
-  const waiting = board.pullRequests.filter(p => p.isReviewer && !p.isMine && p.myVote === 0).length
+  const items = attentionItems(board, opts)
+  const count = kind => items.filter(i => i.kind === kind).length
+  const parts = []
+  if (count('pipeline')) parts.push(`✗ ${count('pipeline')} failed`)
+  if (count('pr-problem')) parts.push(`⚠ ${plural(count('pr-problem'), 'PR')} in trouble`)
+  if (count('pr-review')) parts.push(`◔ ${count('pr-review')} to review`)
+  if (count('pr-ready')) parts.push(`✓ ${count('pr-ready')} ready to complete`)
   const problems = board.errors?.length ?? 0
-  // missing results are not good news: an auth or project failure leaves no pipelines at all
-  const head = failed ? `● ${failed} failed` : problems ? '⚠ incomplete' : '● all green'
-  return `${head} · ${waiting} PRs waiting on you · ${board.workItems.length} work items${problems ? ` · ⚠ ${problems} error${problems === 1 ? '' : 's'}` : ''}`
+  if (problems) parts.push(`⚠ incomplete: ${plural(problems, 'error')}`)
+  return parts.length ? parts.join(' · ') : '✓ all clear'
 }
 
-/** Plain-text board for `claude -p` and the agent tool. */
-export function boardToText(board) {
-  const lines = [summarise(board), '']
+/** "ends in 3d" / "ends today" / "ended 2d ago" for a sprint; empty when it has no end date. */
+export function sprintEnds(sprint, now = Date.now()) {
+  const end = Date.parse(sprint.finish ?? '')
+  if (!end) return ''
+  // a sprint ends on a date, not at an hour: compare calendar days
+  const day = t => Math.floor(t / 86_400_000)
+  const days = day(end) - day(now)
+  return days > 1 ? `ends in ${days}d` : days === 1 ? 'ends tomorrow' : days === 0 ? 'ends today' : `ended ${-days}d ago`
+}
+
+/** Plain-text board for `claude -p` and the agent tool: what needs you first, then your sprint, then the rest. */
+export function boardToText(board, opts) {
+  const lines = [summarise(board, opts), '']
   const group = (title, rows) => rows.length && lines.push(`## ${title}`, ...rows, '')
-  group('Pipelines', board.pipelines.map(p => `- [${p.state}] ${p.org}/${p.project} · ${p.definition} @ ${p.branch} (build ${p.buildId}) ${p.url}`))
+  const items = attentionItems(board, opts)
+  group('Needs you', items.map((i, n) => `${n + 1}. ${GLYPH[i.kind]} ${i.where} · ${i.title}${i.branch ? ` @ ${i.branch}` : ''} — ${i.reason} ${i.url}`))
+  for (const s of board.sprints ?? []) {
+    const mine = board.workItems.filter(w => w.org === s.org && w.project === s.project && w.sprint === s.name)
+    const open = mine.filter(w => !w.isClosed)
+    group(
+      `${s.name} · ${s.org}/${s.project}${sprintEnds(s) ? ` (${sprintEnds(s)})` : ''}`,
+      [...open.map(w => `- ${w.type} #${w.id} P${w.priority} [${w.state}] ${w.title} ${w.url}`), ...(mine.length > open.length ? [`- (${mine.length - open.length} done)`] : [])],
+    )
+  }
   group(
     'Pull requests',
-    board.pullRequests.map(
-      p => `- ${p.isReviewer && !p.isMine && p.myVote === 0 ? '[review requested] ' : ''}${p.org}/${p.project} · !${p.id} ${p.title} (${p.source} → ${p.target}) vote=${p.vote} merge=${p.mergeStatus} build=${p.build ?? '-'}${p.isDraft ? ' draft' : ''} ${p.url}`,
-    ),
+    board.pullRequests.map(p => `- ${p.org}/${p.project} · !${p.id} ${p.title} (${p.source} → ${p.target}) vote=${p.vote} merge=${p.mergeStatus} build=${p.build ?? '-'}${p.isDraft ? ' draft' : ''}${p.isMine ? '' : ' (reviewing)'} ${p.url}`),
   )
-  group('Work items', board.workItems.map(w => `- ${w.project} · ${w.type} #${w.id} P${w.priority} [${w.state}] ${w.title} ${w.url}`))
+  group('Pipelines', board.pipelines.map(p => `- [${p.state}] ${p.org}/${p.project} · ${p.definition} @ ${p.branch} (build ${p.buildId}) ${p.url}`))
   if (board.errors.length) group('Errors', board.errors.map(e => `- ${e.org} ${e.scope}: ${e.message}`))
   return lines.join('\n').trimEnd()
 }
 
 /** Compact JSON for the cockpit_get_board tool. */
-export function boardToCompact(board) {
+export function boardToCompact(board, opts) {
   return {
     fetchedAt: board.fetchedAt,
-    summary: summarise(board),
-    pipelines: board.pipelines.map(({ org, project, definition, branch, state, buildId, finished, url }) => ({ org, project, definition, branch, state, buildId, finished, url })),
+    summary: summarise(board, opts),
+    needsYou: attentionItems(board, opts).map(({ kind, org, title, where, branch, reason, url }) => ({ kind, where, title, branch, reason, url })),
+    sprints: (board.sprints ?? []).map(({ org, project, name, finish }) => ({ org, project, name, finish })),
+    workItems: board.workItems.map(({ org, project, id, type, title, state, isClosed, sprint, priority, url }) => ({ org, project, id, type, title, state, isClosed, sprint, priority, url })),
     pullRequests: board.pullRequests.map(({ org, project, id, title, repo, source, target, isDraft, isMine, myVote, vote, mergeStatus, build, url }) => ({ org, project, id, title, repo, source, target, isDraft, isMine, myVote, vote, mergeStatus, build, url })),
-    workItems: board.workItems.map(({ org, project, id, type, title, state, priority, url }) => ({ org, project, id, type, title, state, priority, url })),
+    pipelines: board.pipelines.map(({ org, project, definition, branch, state, isMine, buildId, finished, url }) => ({ org, project, definition, branch, state, isMine, buildId, finished, url })),
     errors: board.errors,
   }
 }

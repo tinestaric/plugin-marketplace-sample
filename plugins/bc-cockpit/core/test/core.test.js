@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { createCockpit, boardToText, diffBoards, summarise } from '../index.js'
+import { attentionItems, createCockpit, boardToText, diffBoards, summarise } from '../index.js'
 import { filterPipelines } from '../board.js'
 import { normaliseRemote, resolveLocalRepo } from '../repos.js'
 import { trimStepLog, trimLogs, buildFixPrompt } from '../failure.js'
@@ -15,11 +15,16 @@ const json = name => JSON.parse(fx(name))
 function fakeIo({ files = {}, dirs = {}, az = true, pat } = {}) {
   const calls = []
   const store = new Map()
+  const BS = String.fromCharCode(92) // a backslash: iteration paths are Project\Sprint
+  const segment = (url, i) => decodeURIComponent(url.split('/')[i] ?? '')
   const routes = [
     [/connectionData/, () => fx('connectionData.json')],
+    // the sprint endpoints come before the project list, whose pattern would swallow them
+    [/_apis\/projects\/[^/]+\/teams/, url => JSON.stringify({ value: [{ id: 'team1', name: decodeURIComponent(url.split('/projects/')[1].split('/')[0]) + ' Team' }] })],
+    [/teamsettings\/iterations/, url => JSON.stringify({ value: [{ id: 'it1', name: 'Sprint 24', path: segment(url, 4) + BS + 'Sprint 24', attributes: { startDate: '2026-10-19T00:00:00Z', finishDate: '2026-10-30T00:00:00Z' } }] })],
     [/_apis\/projects/, () => fx('projects.json')],
-    [/wit\/wiql/, () => fx('wiql.json')],
-    [/workitemsbatch/, () => fx('workitemsbatch.json')],
+    [/wit\/wiql/, url => (url.includes('/ProjA/') ? fx('wiql.json') : JSON.stringify({ workItems: [] }))],
+    [/workitemsbatch/, (url, init) => JSON.stringify({ value: json('workitemsbatch.json').value.filter(w => JSON.parse(init.body).ids.includes(w.id)) })],
     [/searchCriteria\.creatorId/, () => fx('prs-mine.json')],
     [/searchCriteria\.reviewerId/, () => fx('prs-review.json')],
     [/refs%2Fpull%2F/, () => fx('prbuilds.json')],
@@ -41,7 +46,7 @@ function fakeIo({ files = {}, dirs = {}, az = true, pat } = {}) {
       if (url.includes('wit/wiql') && (init.body ?? '').includes('StateCategory')) return { status: 400, ok: false, text: '{"message":"TF51005: The query references a field that does not exist."}' }
       const hit = routes.find(([re]) => re.test(url))
       if (!hit) return { status: 404, ok: false, text: '' }
-      return { status: 200, ok: true, text: hit[1]() }
+      return { status: 200, ok: true, text: hit[1](url, init) }
     },
     async run(argv) {
       calls.push({ argv })
@@ -66,6 +71,7 @@ function fakeIo({ files = {}, dirs = {}, az = true, pat } = {}) {
   }
 }
 
+const NOW = Date.parse('2026-10-21T08:00:00Z') // the fixtures' week
 const CONFIG = {
   organisations: [{ name: 'orgA', projects: '*' }],
   repoRoots: ['/repos'],
@@ -87,10 +93,12 @@ test('getBoard merges work items, PRs and pipelines across projects', async () =
   const board = await createCockpit(io).getBoard({ force: true })
 
   assert.deepEqual(board.errors, [])
-  // 2 projects in the fixture, each returns the same recorded data
-  assert.equal(board.workItems.length, 2)
-  assert.deepEqual(board.workItems.map(w => w.id), [12, 11], 'priority 1 before priority 2')
-  assert.equal(board.workItems[0].url, 'https://dev.azure.com/orgA/ProjA/_workitems/edit/12')
+  // my items in ProjA's current sprint: open work first (in progress, then not started), the finished item last
+  assert.deepEqual(board.workItems.map(w => w.id), [11, 12, 13])
+  assert.deepEqual(board.workItems.map(w => w.isClosed), [false, false, true])
+  assert.equal(board.workItems[0].sprint, 'Sprint 24')
+  assert.equal(board.workItems[0].url, 'https://dev.azure.com/orgA/ProjA/_workitems/edit/11')
+  assert.deepEqual(board.sprints.map(x => [x.project, x.name]), [['ProjA', 'Sprint 24']], 'ProjB has a sprint but nothing of mine in it')
 
   const pr = board.pullRequests.find(p => p.id === 7 && p.project === 'ProjA')
   assert.equal(pr.isMine, true)
@@ -103,8 +111,9 @@ test('getBoard merges work items, PRs and pipelines across projects', async () =
   assert.equal(review.myVote, 0)
 
   assert.equal(board.pipelines[0].state, 'failed', 'failures first')
-  assert.match(summarise(board), /failed · 2 PRs waiting on you · 2 work items/)
-  assert.match(boardToText(board), /## Pipelines/)
+  const text = boardToText(board, { now: NOW })
+  assert.ok(text.indexOf('## Needs you') < text.indexOf('## Sprint 24'), 'what needs you comes first')
+  assert.ok(text.indexOf('## Sprint 24') < text.indexOf('## Pipelines'))
 })
 
 test('pipelineScope: mine keeps my runs and my PR branches, all keeps every latest', () => {
@@ -257,39 +266,11 @@ test('on Windows az is az.cmd: when it cannot be spawned directly, cmd.exe /c az
   assert.deepEqual(board.errors, [])
 })
 
-test('the work item query uses only fields WIQL knows, and excludes closed states by name', async () => {
-  const { workItemsQuery, CLOSED_STATES } = await import('../azdo.js')
-  const q = workItemsQuery()
-  assert.ok(!q.includes('StateCategory'))
-  assert.ok(q.includes('[System.AssignedTo] = @Me'))
-  for (const state of CLOSED_STATES) assert.ok(q.includes("'" + state + "'"))
-  assert.ok(!q.includes('TeamProject'), 'all projects when none are named')
-  assert.ok(workItemsQuery({ closedStates: ['Shipped'] }).includes("NOT IN ('Shipped')"), 'closedStates in the config override the defaults')
-  assert.ok(workItemsQuery({ projects: ["Cust'omer A", 'B'] }).includes("[System.TeamProject] IN ('Cust''omer A', 'B')"))
-})
-
-test('work items are fetched for the configured projects only', async () => {
-  const cfg = { ...CONFIG, organisations: [{ name: 'orgA', projects: ['ProjA'] }] }
-  const io = fakeIo({ files: { '/home/me/.bc-cockpit/config.json': JSON.stringify(cfg) } })
-  const board = await createCockpit(io).getBoard({ force: true })
-  assert.deepEqual(board.errors, [])
-  assert.ok(board.workItems.length > 0, 'the query is accepted and returns items')
-  const wiql = io.calls.find(c => c.url?.includes('wit/wiql'))
-  assert.ok(JSON.parse(wiql.init.body).query.includes("[System.TeamProject] IN ('ProjA')"))
-})
-
 test('a PR-validation build on refs/pull/<id>/merge counts as mine, whoever requested it', () => {
   const build = { project: 'P', definitionId: 1, repoId: 'r', branch: 'refs/pull/7/merge', requestedForId: 'service', state: 'failed', buildId: 1 }
   const prBranches = new Set(['P/r/feature/x', 'P/r/refs/pull/7/merge'])
   assert.equal(filterPipelines([build], { scope: 'mine', meId: 'me', prBranches }).length, 1)
   assert.equal(filterPipelines([build], { scope: 'mine', meId: 'me', prBranches: new Set(['P/r/feature/x']) }).length, 0)
-})
-
-test('missing results are never reported as all green', () => {
-  const board = { workItems: [], pullRequests: [], pipelines: [], errors: [{ org: 'a', scope: 'sign-in', message: 'x' }] }
-  assert.equal(summarise(board), '⚠ incomplete · 0 PRs waiting on you · 0 work items · ⚠ 1 error')
-  assert.ok(summarise({ ...board, errors: [] }).startsWith('● all green'))
-  assert.ok(summarise({ ...board, pipelines: [{ state: 'failed' }] }).startsWith('● 1 failed'))
 })
 
 test('a config.json with comments (as people and other tools write it) loads', async () => {
@@ -344,4 +325,147 @@ test('build logs are requested as plain text', async () => {
   await createCockpit(io).getFailureDetails({ org: 'orgA', project: 'ProjA', buildId: 501 })
   const logCall = io.calls.find(c => c.url?.includes('log/compile'))
   assert.equal(logCall.init.headers.Accept, 'text/plain')
+})
+
+// ── current sprint ─────────────────────────────────────────────────────────
+
+test('the work item query names the sprint paths and the project, with quotes escaped', async () => {
+  const { sprintItemsQuery } = await import('../azdo.js')
+  const BS = String.fromCharCode(92)
+  const q = sprintItemsQuery("Cust'omer", ["Cust'omer" + BS + 'Sprint 3', "Cust'omer" + BS + 'Sprint 4'])
+  assert.ok(!q.includes('StateCategory'), 'a field WIQL does not know')
+  assert.ok(q.includes('[System.AssignedTo] = @Me'))
+  assert.ok(q.includes("[System.TeamProject] = 'Cust''omer'"))
+  assert.ok(q.includes("[System.IterationPath] UNDER 'Cust''omer" + BS + "Sprint 3' OR [System.IterationPath] UNDER 'Cust''omer" + BS + "Sprint 4'"))
+})
+
+test('only the current sprint of the teams I am on is queried', async () => {
+  const io = fakeIo(withConfig())
+  const board = await createCockpit(io).getBoard({ force: true })
+  assert.deepEqual(board.errors, [])
+  const urls = io.calls.map(c => c.url).filter(Boolean)
+  assert.ok(urls.some(u => u.includes('/teams') && u.includes('$mine=true')), 'teams: mine only')
+  assert.ok(urls.some(u => u.includes('teamsettings/iterations') && u.includes('$timeframe=current')), 'iterations: current only')
+  const wiql = io.calls.find(c => c.url?.includes('/ProjA/') && c.url.includes('wit/wiql'))
+  assert.ok(JSON.parse(wiql.init.body).query.includes('UNDER'), 'under the sprint, per project')
+  assert.ok(!io.calls.some(c => c.url?.includes('dev.azure.com/orgA/_apis/wit/wiql')), 'no org-wide query any more')
+})
+
+test('a project with no sprint of mine contributes no work items, and no error (no fallback)', async () => {
+  const io = fakeIo(withConfig())
+  const real = io.fetch
+  io.fetch = async (url, init) => (url.includes('/projects/ProjA/teams') ? { status: 200, ok: true, text: JSON.stringify({ value: [] }) } : real(url, init))
+  const board = await createCockpit(io).getBoard({ force: true })
+  assert.deepEqual(board.workItems, [])
+  assert.deepEqual(board.sprints, [])
+  assert.deepEqual(board.errors, [])
+})
+
+test('a team without work settings (404 on its iterations) is skipped quietly', async () => {
+  const io = fakeIo(withConfig())
+  const real = io.fetch
+  io.fetch = async (url, init) => (url.includes('/ProjA/') && url.includes('teamsettings') ? { status: 404, ok: false, text: '' } : real(url, init))
+  const board = await createCockpit(io).getBoard({ force: true })
+  assert.deepEqual(board.errors, [], 'not an error')
+  assert.deepEqual(board.workItems, [])
+})
+
+test('sprints are cached, so a refresh does not ask again', async () => {
+  const io = fakeIo(withConfig())
+  const cockpit = createCockpit(io)
+  await cockpit.getBoard({ force: true })
+  const asked = io.calls.filter(c => c.url?.includes('teamsettings')).length
+  await cockpit.getBoard({ force: true })
+  assert.equal(io.calls.filter(c => c.url?.includes('teamsettings')).length, asked)
+})
+
+test('sprintEnds says when a sprint ends', async () => {
+  const { sprintEnds } = await import('../index.js')
+  const now = Date.parse('2026-10-27T12:00:00Z')
+  assert.equal(sprintEnds({ finish: '2026-10-30T00:00:00Z' }, now), 'ends in 3d')
+  assert.equal(sprintEnds({ finish: '2026-10-28T00:00:00Z' }, now), 'ends tomorrow')
+  assert.equal(sprintEnds({ finish: '2026-10-27T20:00:00Z' }, now), 'ends today')
+  assert.equal(sprintEnds({ finish: '2026-10-24T00:00:00Z' }, now), 'ended 3d ago')
+  assert.equal(sprintEnds({ finish: null }, now), '', 'a sprint without dates says nothing')
+})
+
+// ── what needs you ─────────────────────────────────────────────────────────
+
+const DAY = 86_400_000
+const pipe = (o = {}) => ({ org: 'o', project: 'p', definitionId: 1, definition: 'CI', branch: 'main', state: 'failed', isMine: true, finished: new Date(NOW - DAY).toISOString(), url: 'u', ...o })
+const pr = (o = {}) => ({ org: 'o', project: 'p', id: 1, title: 't', source: 'f', isDraft: false, isMine: true, isReviewer: false, myVote: null, vote: 'none', mergeStatus: 'succeeded', build: null, created: new Date(NOW - DAY).toISOString(), url: 'u', ...o })
+const boardOf = (pipelines = [], pullRequests = [], errors = []) => ({ pipelines, pullRequests, workItems: [], sprints: [], errors, fetchedAt: NOW })
+const kinds = (board, opts) => attentionItems(board, { now: NOW, ...opts }).map(i => i.kind)
+
+test("a failed pipeline of mine needs me; passing, running and other people's do not", () => {
+  assert.deepEqual(kinds(boardOf([pipe()])), ['pipeline'])
+  assert.deepEqual(kinds(boardOf([pipe({ state: 'succeeded' }), pipe({ state: 'running' }), pipe({ isMine: false })])), [])
+})
+
+test('a failure older than the cutoff is history; the cutoff is configurable (default 7 days)', () => {
+  const old = pipe({ finished: new Date(NOW - 8 * DAY).toISOString() })
+  assert.deepEqual(kinds(boardOf([old])), [])
+  assert.deepEqual(kinds(boardOf([pipe({ finished: new Date(NOW - 6 * DAY).toISOString() })])), ['pipeline'])
+  assert.deepEqual(kinds(boardOf([old]), { maxAgeDays: 30 }), ['pipeline'])
+  assert.deepEqual(kinds({ ...boardOf([old]), settings: { failureMaxAgeDays: 14 } }), ['pipeline'], 'from the config, carried on the board')
+})
+
+test('a failure on a branch with no open PR still counts: that is when you want to know', () => {
+  assert.deepEqual(kinds(boardOf([pipe({ branch: 'feature/not-yet-a-pr' })], [])), ['pipeline'])
+})
+
+test('my PR in trouble: conflicts, failed build, changes requested, rejected; drafts never nag', () => {
+  assert.deepEqual(kinds(boardOf([], [pr({ mergeStatus: 'conflicts' })])), ['pr-problem'])
+  assert.deepEqual(kinds(boardOf([], [pr({ build: 'failed' })])), ['pr-problem'])
+  assert.deepEqual(kinds(boardOf([], [pr({ vote: 'waiting' })])), ['pr-problem'])
+  assert.deepEqual(kinds(boardOf([], [pr({ vote: 'rejected' })])), ['pr-problem'])
+  assert.deepEqual(kinds(boardOf([], [pr({ mergeStatus: 'conflicts', isDraft: true })])), [])
+  assert.equal(attentionItems(boardOf([], [pr({ mergeStatus: 'conflicts', build: 'failed' })]), { now: NOW })[0].reason, 'merge conflicts, build failed')
+})
+
+test('a PR waiting on my review, and my approved PR ready to complete', () => {
+  assert.deepEqual(kinds(boardOf([], [pr({ isMine: false, isReviewer: true, myVote: 0 })])), ['pr-review'])
+  assert.deepEqual(kinds(boardOf([], [pr({ isMine: false, isReviewer: true, myVote: 10 })])), [], 'already voted')
+  assert.deepEqual(kinds(boardOf([], [pr({ isMine: false, isReviewer: true, myVote: 0, isDraft: true })])), [], 'a draft is not ready for review')
+  assert.deepEqual(kinds(boardOf([], [pr({ vote: 'approved' })])), ['pr-ready'])
+  assert.deepEqual(kinds(boardOf([], [pr({ vote: 'approved', build: 'failed' })])), ['pr-problem'], 'approved but red is trouble, not good news')
+  assert.deepEqual(kinds(boardOf([], [pr()])), [], 'a healthy PR in flight is not news')
+})
+
+test('the list is ordered: red builds, PRs in trouble, reviews, ready to complete', () => {
+  const board = boardOf([pipe()], [pr({ id: 4, vote: 'approved' }), pr({ id: 3, isMine: false, isReviewer: true, myVote: 0 }), pr({ id: 2, mergeStatus: 'conflicts' })])
+  assert.deepEqual(kinds(board), ['pipeline', 'pr-problem', 'pr-review', 'pr-ready'])
+})
+
+test('the summary names what needs you, says all clear when nothing does, and never calls an incomplete board clear', () => {
+  const full = boardOf([pipe(), pipe({ definitionId: 2 })], [pr({ mergeStatus: 'conflicts' }), pr({ id: 3, isMine: false, isReviewer: true, myVote: 0 }), pr({ id: 4, vote: 'approved' })])
+  assert.equal(summarise(full, { now: NOW }), '✗ 2 failed · ⚠ 1 PR in trouble · ◔ 1 to review · ✓ 1 ready to complete')
+  assert.equal(summarise(boardOf(), { now: NOW }), '✓ all clear')
+  const incomplete = boardOf([], [], [{ org: 'a', scope: 'sign-in', message: 'x' }])
+  assert.equal(summarise(incomplete, { now: NOW }), '⚠ incomplete: 1 error')
+  assert.ok(summarise(boardOf([pipe()], [], incomplete.errors), { now: NOW }).startsWith('✗ 1 failed'))
+  assert.equal(summarise(null), 'loading…')
+})
+
+test('a PR whose red build is already a pipeline row is not listed a second time for that build', () => {
+  const failedPrBuild = pipe({ definition: 'PR validation', branch: 'refs/pull/2/merge', definitionId: 9 })
+  const board = boardOf([failedPrBuild], [pr({ id: 2, source: 'feature/x', build: 'failed' }), pr({ id: 3, build: 'failed', mergeStatus: 'conflicts' })])
+  const items = attentionItems(board, { now: NOW })
+  assert.deepEqual(items.map(i => i.kind), ['pipeline', 'pr-problem'])
+  assert.equal(items[0].branch, 'PR !2 (feature/x)', 'named after the PR, not the merge ref')
+  assert.equal(items[1].title, '!3 t', 'PR 3 has no pipeline row, so its failed build still counts')
+  assert.equal(items[1].reason, 'merge conflicts, build failed')
+  // PR 2 has nothing else wrong, so it adds no row of its own
+  assert.ok(!items.some(i => i.pr?.id === 2))
+  // ...but its conflicts would still show
+  const conflicted = attentionItems(boardOf([failedPrBuild], [pr({ id: 2, source: 'feature/x', build: 'failed', mergeStatus: 'conflicts' })]), { now: NOW })
+  assert.deepEqual(conflicted.map(i => i.reason), ['failed', 'merge conflicts'])
+})
+
+test('firstError picks the compiler error or test message, not a step header', async () => {
+  const { firstError } = await import('../failure.js')
+  assert.equal(firstError("### Compile AL app\nsrc/A.al(5,9): error AL0118: The name 'Foo' does not exist"), "src/A.al(5,9): error AL0118: The name 'Foo' does not exist")
+  assert.equal(firstError('### Run AL tests\nCodeunit 50100 "Demo Tests"\nMethod TestGreeting\nError Message: Expected 1 but got 2\nCall Stack:'), 'Expected 1 but got 2')
+  assert.equal(firstError('### Build\nsomething went wrong\nmore'), 'something went wrong')
+  assert.equal(firstError(''), '')
 })

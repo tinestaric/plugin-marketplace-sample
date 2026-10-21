@@ -14,7 +14,7 @@ export const EXAMPLE_CONFIG = {
   _pipelineScopeComment: '"mine" = runs I requested or on branches of my open PRs; "all" = latest run of every definition',
 }
 
-const DEFAULTS = { organisations: [], repoRoots: [], refreshMinutes: 3, pipelineScope: 'mine' }
+const DEFAULTS = { organisations: [], repoRoots: [], refreshMinutes: 3, pipelineScope: 'mine', failureMaxAgeDays: 7 }
 
 export const configDir = io => joinPath(io.home, '.bc-cockpit')
 export const configPath = io => joinPath(configDir(io), 'config.json')

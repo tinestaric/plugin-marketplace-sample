@@ -1,4 +1,5 @@
 { "value": [
-  { "id": 11, "fields": { "System.Title": "Fix posting", "System.WorkItemType": "Bug", "System.State": "Active", "System.TeamProject": "ProjA", "System.IterationPath": "ProjA/S1", "Microsoft.VSTS.Common.Priority": 2, "System.ChangedDate": "2026-10-01T10:00:00Z" } },
-  { "id": 12, "fields": { "System.Title": "Add report", "System.WorkItemType": "Task", "System.State": "New", "System.TeamProject": "ProjA", "Microsoft.VSTS.Common.Priority": 1, "System.ChangedDate": "2026-09-01T10:00:00Z" } }
+  { "id": 11, "fields": { "System.Title": "Fix posting", "System.WorkItemType": "Bug", "System.State": "Active", "System.TeamProject": "ProjA", "System.IterationPath": "ProjA\\Sprint 24", "Microsoft.VSTS.Common.Priority": 2, "System.ChangedDate": "2026-10-01T10:00:00Z" } },
+  { "id": 12, "fields": { "System.Title": "Add report", "System.WorkItemType": "Task", "System.State": "New", "System.TeamProject": "ProjA", "System.IterationPath": "ProjA\\Sprint 24", "Microsoft.VSTS.Common.Priority": 1, "System.ChangedDate": "2026-09-01T10:00:00Z" } },
+  { "id": 13, "fields": { "System.Title": "Shipped last week", "System.WorkItemType": "Task", "System.State": "Done", "System.TeamProject": "ProjA", "System.IterationPath": "ProjA\\Sprint 24\\Week 2", "Microsoft.VSTS.Common.Priority": 1, "System.ChangedDate": "2026-10-10T10:00:00Z" } }
 ] }

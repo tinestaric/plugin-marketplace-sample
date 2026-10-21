@@ -575,3 +575,52 @@ test('a cancelled symbol download is a failure, not a success', async () => {
   assert.equal(r.ok, false)
   assert.ok(r.downloaded.length >= 1 && r.failed.some(f => f.error === 'cancelled'))
 })
+
+// ── where the workspace is ─────────────────────────────────────────────────
+
+function repo(extra = {}) {
+  return {
+    '/repo/.git/config': '[core]',
+    '/repo/Project.code-workspace': JSON.stringify({ folders: [{ path: 'App' }, { path: 'Test' }] }),
+    '/repo/App/app.json': appJson('a', 'Connector'),
+    '/repo/Test/app.json': appJson('t', 'Connector Test', ['a']),
+    '/repo/Mapping/app.json': appJson('m', 'Mapping'),
+    '/repo/App/src/Thing.al': 'x',
+    ...extra,
+  }
+}
+
+test('starting inside one app still finds the whole workspace (its file and the sibling apps)', async () => {
+  for (const start of ['/repo', '/repo/App', '/repo/App/src', '/repo/Test']) {
+    const apps = await createPublisher(fakeIo({ files: repo() }), { workspaceRoot: start }).discoverApps()
+    assert.deepEqual(apps.map(a => a.name), ['Connector', 'Connector Test'], `from ${start}`)
+  }
+})
+
+test('without a workspace file the git root is the workspace; without git, where you started', async () => {
+  const noWorkspace = repo()
+  delete noWorkspace['/repo/Project.code-workspace']
+  const fromGit = await createPublisher(fakeIo({ files: noWorkspace }), { workspaceRoot: '/repo/App/src' }).discoverApps()
+  assert.deepEqual(fromGit.map(a => a.name).sort(), ['Connector', 'Connector Test', 'Mapping'])
+
+  const noGit = repo()
+  delete noGit['/repo/.git/config']
+  delete noGit['/repo/Project.code-workspace']
+  const here = await createPublisher(fakeIo({ files: noGit }), { workspaceRoot: '/repo/App' }).discoverApps()
+  assert.deepEqual(here.map(a => a.name), ['Connector'])
+})
+
+test('the walk up stops at the repository: a workspace file above it is not this project', async () => {
+  const files = { ...repo(), '/Other.code-workspace': JSON.stringify({ folders: [{ path: 'elsewhere' }] }) }
+  const apps = await createPublisher(fakeIo({ files }), { workspaceRoot: '/repo/App' }).discoverApps()
+  assert.deepEqual(apps.map(a => a.name), ['Connector', 'Connector Test'])
+})
+
+test('the app you are standing in is identified, the deepest one when apps nest', async () => {
+  const { appContaining } = await import('../apps.js')
+  const apps = [{ path: '/repo/App' }, { path: '/repo/App/sub' }, { path: '/repo/Test' }]
+  assert.equal(appContaining(apps, '/repo/App/src').path, '/repo/App')
+  assert.equal(appContaining(apps, '/repo/App/sub/x').path, '/repo/App/sub')
+  assert.equal(appContaining(apps, '/repo'), null)
+  assert.equal(appContaining(apps, '/repo/AppleTree'), null, 'a folder that merely starts with the same letters is not inside')
+})

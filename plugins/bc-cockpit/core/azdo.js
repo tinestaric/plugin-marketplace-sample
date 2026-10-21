@@ -3,7 +3,10 @@ import { errorMessage } from './util.js'
 const API = '7.1'
 
 /** Thin read-only Azure DevOps REST client. The only writes are WIQL/batch POSTs, which are queries. */
+const SPRINT_TTL_MS = 30 * 60 * 1000
+
 export function createClient(io, auth) {
+  const sprintCache = new Map()
   async function request(url, { method = 'GET', body, raw = false } = {}) {
     // build logs come back as a JSON envelope unless plain text is asked for
     const headers = { Authorization: await auth.authorization(), Accept: raw ? 'text/plain' : 'application/json' }
@@ -40,23 +43,55 @@ export function createClient(io, auth) {
         skip += 100
       }
     },
-    async workItems(org, { projects, closedStates } = {}) {
-      const wiql = { query: workItemsQuery({ projects, closedStates }) }
-      const res = await request(q(`https://dev.azure.com/${e(org)}/_apis/wit/wiql`, '$top=200'), { method: 'POST', body: wiql })
+    /**
+     * The sprints that count for me in one project: the current iteration of each team I am a member of (a team
+     * without work settings has none), cached for half an hour since they change by the fortnight.
+     */
+    async sprints(org, project) {
+      const key = `${org}/${project}`
+      const hit = sprintCache.get(key)
+      if (hit && io.now() - hit.at < SPRINT_TTL_MS) return hit.value
+      const teams = (await request(q(`https://dev.azure.com/${e(org)}/_apis/projects/${e(project)}/teams`, '$mine=true&$top=100'))).value ?? []
+      const byPath = new Map()
+      await Promise.all(
+        teams.map(async team => {
+          try {
+            const d = await request(q(`https://dev.azure.com/${e(org)}/${e(project)}/${e(team.id)}/_apis/work/teamsettings/iterations`, '$timeframe=current'))
+            for (const it of d.value ?? []) {
+              byPath.set(it.path, { org, project, name: it.name, path: it.path, team: team.name, start: it.attributes?.startDate ?? null, finish: it.attributes?.finishDate ?? null })
+            }
+          } catch {
+            /* no work settings for this team: it has no sprint */
+          }
+        }),
+      )
+      const value = [...byPath.values()]
+      sprintCache.set(key, { at: io.now(), value })
+      return value
+    },
+    /** My work items in the given sprints of one project (closed ones included, flagged). */
+    async sprintItems(org, project, sprints, { closedStates } = {}) {
+      if (!sprints.length) return []
+      const res = await request(q(`https://dev.azure.com/${e(org)}/${e(project)}/_apis/wit/wiql`, '$top=200'), {
+        method: 'POST',
+        body: { query: sprintItemsQuery(project, sprints.map(s => s.path)) },
+      })
       const ids = (res.workItems ?? []).map(w => w.id)
+      const closed = new Set((closedStates?.length ? closedStates : CLOSED_STATES).map(x => x.toLowerCase()))
       const items = []
       for (let i = 0; i < ids.length; i += 200) {
         const batch = await request(q(`https://dev.azure.com/${e(org)}/_apis/wit/workitemsbatch`), {
           method: 'POST',
           body: {
             ids: ids.slice(i, i + 200),
-            fields: [
-              'System.Id', 'System.Title', 'System.WorkItemType', 'System.State', 'System.TeamProject',
-              'System.IterationPath', 'Microsoft.VSTS.Common.Priority', 'System.ChangedDate',
-            ],
+            fields: ['System.Id', 'System.Title', 'System.WorkItemType', 'System.State', 'System.TeamProject', 'System.IterationPath', 'Microsoft.VSTS.Common.Priority', 'System.ChangedDate'],
           },
         })
-        items.push(...(batch.value ?? []).map(w => normaliseWorkItem(org, w)))
+        for (const w of batch.value ?? []) {
+          const item = normaliseWorkItem(org, w, closed)
+          item.sprint = sprints.find(s => item.iteration === s.path || item.iteration.startsWith(s.path + '\\'))?.name ?? null
+          items.push(item)
+        }
       }
       return items
     },
@@ -87,7 +122,7 @@ export function createClient(io, auth) {
   }
 }
 
-export function normaliseWorkItem(org, w) {
+export function normaliseWorkItem(org, w, closed = new Set(CLOSED_STATES.map(x => x.toLowerCase()))) {
   const f = w.fields
   const project = f['System.TeamProject']
   return {
@@ -96,6 +131,7 @@ export function normaliseWorkItem(org, w) {
     title: f['System.Title'],
     type: f['System.WorkItemType'],
     state: f['System.State'],
+    isClosed: closed.has(String(f['System.State']).toLowerCase()),
     project,
     iteration: f['System.IterationPath'] ?? '',
     priority: f['Microsoft.VSTS.Common.Priority'] ?? 99,
@@ -104,17 +140,15 @@ export function normaliseWorkItem(org, w) {
   }
 }
 
-// System.StateCategory is not a queryable WIQL field (TF51005), so closed work is excluded by state name.
+// System.StateCategory is not a queryable WIQL field (TF51005), so finished work is recognised by state name.
 // The names cover the Basic, Agile, Scrum and CMMI processes; "closedStates" in the config overrides them.
 export const CLOSED_STATES = ['Done', 'Closed', 'Removed', 'Completed', 'Cut']
 const lit = s => `'${String(s).replace(/'/g, "''")}'` // a WIQL string literal: quotes doubled
 
-export function workItemsQuery({ projects, closedStates } = {}) {
-  const closed = (closedStates?.length ? closedStates : CLOSED_STATES).map(lit).join(', ')
-  let where = `[System.AssignedTo] = @Me AND [System.State] NOT IN (${closed})`
-  // only the projects the config asks for: others must neither show up nor use the 200-item limit
-  if (Array.isArray(projects) && projects.length) where += ` AND [System.TeamProject] IN (${projects.map(lit).join(', ')})`
-  return `SELECT [System.Id] FROM WorkItems WHERE ${where} ORDER BY [System.ChangedDate] DESC`
+/** My items under the given iteration paths of one project. Closed ones are fetched too and flagged, not filtered. */
+export function sprintItemsQuery(project, paths) {
+  const under = paths.map(p => `[System.IterationPath] UNDER ${lit(p)}`).join(' OR ')
+  return `SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.TeamProject] = ${lit(project)} AND (${under}) ORDER BY [Microsoft.VSTS.Common.Priority] ASC, [System.ChangedDate] DESC`
 }
 
 /** Overall vote: the worst reviewer vote wins (rejected < waiting < none < approved-with-suggestions < approved). */

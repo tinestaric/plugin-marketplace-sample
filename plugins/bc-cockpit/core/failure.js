@@ -114,3 +114,10 @@ export function buildFixPrompt(f) {
     `${where} Check out the branch, reproduce if possible, fix it, and summarise what you changed. Do not push.`,
   ].join('\n')
 }
+
+/** The one line worth showing on a failure row: the compiler error or test message, not a step header. */
+export function firstError(trimmedLog) {
+  const lines = String(trimmedLog ?? '').split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('###'))
+  const pick = lines.find(l => /\berror AL\d{4}\b/.test(l)) ?? lines.find(l => /^Error Message:/i.test(l)) ?? lines.find(l => /\berror\b/i.test(l)) ?? lines[0] ?? ''
+  return pick.replace(/^Error Message:\s*/i, '')
+}

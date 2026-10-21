@@ -6,7 +6,7 @@
 //   io.fetch(url, init) -> { status, ok, text }                  io.fs { read, write, list, exists, stat }
 //   io.credentials() -> { user, password }   for symbol download only (BC_SERVER_USERNAME / BC_SERVER_PASSWORD)
 //   io.home, io.now()
-import { appFileName, discoverApps as discover } from './apps.js'
+import { appContaining, appFileName, discoverApps as discover, resolveWorkspaceRoot } from './apps.js'
 import { compileApp as compile, findAlTool, findCompiler, isUpToDate, readApp } from './compile.js'
 import { listContainers, listSaas, mergeEnvironments, parseLaunch } from './envs.js'
 import { defaultMode, publishApp as publish, publishBlock } from './publish.js'
@@ -48,7 +48,11 @@ export function createPublisher(io, { workspaceRoot }) {
     }
   }
 
-  const discoverApps = () => discover(io, workspaceRoot)
+  // `workspaceRoot` is where the session started (often inside one app); the workspace is found from there
+  let root
+  const resolvedRoot = async () => (root ??= await resolveWorkspaceRoot(io, workspaceRoot))
+  const discoverApps = async () => discover(io, await resolvedRoot())
+  const currentApp = apps => appContaining(apps, workspaceRoot)
 
   /** Which compiler/publisher is in use, for the header. */
   async function toolStatus() {
@@ -184,6 +188,8 @@ export function createPublisher(io, { workspaceRoot }) {
     loadConfig,
     toolStatus,
     discoverApps,
+    resolvedRoot,
+    currentApp,
     discoverEnvironments,
     findEnvironment,
     compileApp,
