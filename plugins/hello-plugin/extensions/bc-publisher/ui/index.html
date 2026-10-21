@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>BC Publisher</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2 3 7v10l9 5 9-5V7l-9-5Zm0 2.3 6.7 3.7L12 11.7 5.3 8 12 4.3ZM5 9.7l6 3.3v6.7l-6-3.3V9.7Zm8 10v-6.7l6-3.3v6.7l-6 3.3Z"/></svg>
+    </span>
+    <div class="titles">
+      <h1>BC Publisher <span class="ws" id="wsName"></span></h1>
+      <p class="sub"><span id="wsPath">Loading workspace…</span> <span class="chip" id="compiler" hidden></span></p>
+    </div>
+  </div>
+  <div class="tools">
+    <button type="button" class="pill warn" id="issuesBtn" hidden aria-expanded="false" aria-controls="issues"></button>
+    <button type="button" class="btn" id="refreshBtn"><span class="spin" aria-hidden="true"></span><span>Refresh</span></button>
+  </div>
+  <div class="progress" aria-hidden="true"></div>
+</header>
+
+<section id="issues" class="issues" hidden aria-label="Discovery issues"></section>
+
+<main class="layout">
+  <section class="panel" aria-labelledby="h-apps">
+    <div class="panel-head">
+      <h2 id="h-apps">Apps <span class="count" id="c-apps">0</span></h2>
+      <label class="selall"><input type="checkbox" id="selectAll"> Select all</label>
+    </div>
+    <div id="apps"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-envs">
+    <div class="panel-head">
+      <h2 id="h-envs">Targets <span class="count" id="c-envs">0</span></h2>
+      <span class="seg" role="group" aria-label="Schema sync mode">
+        <button type="button" data-mode="Add" aria-pressed="true" title="Synchronize schema (default)">Add</button>
+        <button type="button" data-mode="ForceSync" aria-pressed="false" title="Force sync: destructive schema changes allowed (data may be lost)">ForceSync</button>
+      </span>
+    </div>
+    <div id="envs"></div>
+  </section>
+
+  <section class="panel output" id="output" hidden aria-labelledby="h-out">
+    <div class="panel-head">
+      <h2 id="h-out">Output</h2>
+      <div class="job-tabs" id="jobTabs" role="tablist" aria-label="Recent jobs"></div>
+    </div>
+    <div id="jobView"></div>
+  </section>
+</main>
+
+<dialog id="confirm" aria-labelledby="confirmTitle">
+  <form method="dialog">
+    <h3 id="confirmTitle">Confirm</h3>
+    <p id="confirmText"></p>
+    <div class="dialog-actions">
+      <button class="btn" value="cancel" type="submit">Cancel</button>
+      <button class="btn primary" value="ok" type="submit" id="confirmOk">Confirm</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast-host" id="toasts" role="status" aria-live="polite"></div>
+<script src="app.js" type="module"></script>
+</body>
+</html>

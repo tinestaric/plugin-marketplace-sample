@@ -1,0 +1,11 @@
+2026-10-20T10:50:01.0000000Z Running tests
+2026-10-20T10:50:02.0000000Z   Codeunit 50100 VAT Tests Failure (1.234 seconds)
+2026-10-20T10:50:02.0000000Z     Testfunction TestValidVatNo Success (0.100 seconds)
+2026-10-20T10:50:02.0000000Z     Testfunction TestInvalidVatNo Failure (0.250 seconds)
+2026-10-20T10:50:02.0000000Z       Error:
+2026-10-20T10:50:02.0000000Z         Assert.AreEqual failed. Expected:<false> (Boolean). Actual:<true> (Boolean).
+2026-10-20T10:50:02.0000000Z       Call Stack:
+2026-10-20T10:50:02.0000000Z         "VAT Tests"(CodeUnit 50100).TestInvalidVatNo line 14 - CustomerA by Contoso
+2026-10-20T10:50:02.0000000Z   Codeunit 50101 Posting Tests Success (0.500 seconds)
+2026-10-20T10:50:02.0000000Z     Testfunction TestPost Success (0.400 seconds)
+2026-10-20T10:50:03.0000000Z ##[error]PowerShell exited with code '1'.

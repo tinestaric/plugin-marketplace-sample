@@ -1,0 +1,7 @@
+{
+  "value": [
+    { "friendlyName": "Dev sandbox", "type": "Sandbox", "name": "dev", "countryCode": "DE", "applicationFamily": "BusinessCentral", "aadTenantId": "11111111-1111-1111-1111-111111111111", "status": "Active", "applicationVersion": "28.4.53241.54676" },
+    { "friendlyName": "Production", "type": "Production", "name": "production", "countryCode": "DE", "applicationFamily": "BusinessCentral", "aadTenantId": "11111111-1111-1111-1111-111111111111", "status": "Active", "applicationVersion": "28.3.12345.0" },
+    { "friendlyName": "Other family", "type": "Sandbox", "name": "other", "countryCode": "US", "applicationFamily": "SomethingElse", "status": "Active" }
+  ]
+}

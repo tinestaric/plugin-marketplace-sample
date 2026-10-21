@@ -1,0 +1,13 @@
+Microsoft (R) AL Compiler version 30.0.43.45776
+Copyright (C) Microsoft Corporation. All rights reserved
+
+Compilation started for project 'Chapter 3 - Common' containing '8' files at '12:01:40.017'.
+
+C:\Work\App\src\Session\EventSession.Table.al(94,10): error AL0297: The application object identifier '50999' is not valid. It must be within the allowed ranges '[50200..50299]'.
+C:\Work\App\src\Setup\Setup.Page.al(12,9): error AL0118: The name 'VatRegNo' does not exist in the current context
+C:\Work\App\src\Setup\Setup.Page.al(12,9): error AL0118: The name 'VatRegNo' does not exist in the current context
+C:\Work\App\src\Sales.TableExt.al(4,5): warning AL0432: Field 'Old' is marked for removal. Reason: Not used. Tag: 26.0.
+C:\Work\App\src\Legacy.Codeunit.al(28,): error AL0133: Argument 1: cannot convert from 'Text' to 'Integer'
+error AL1022: A package with publisher 'Microsoft', name 'Base Application', and a version compatible with '28.4.0.0' could not be found in the package cache folders: C:\Work\App\.alpackages
+
+Compilation ended at '12:01:51.898'.
