@@ -1,0 +1,555 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Dev workflow</title>
+<style>
+  :root {
+    --bg: var(--background-color-default, #fff);
+    --fg: var(--text-color-default, #1f2328);
+    --muted: var(--text-color-muted, #656d76);
+    --border: var(--border-color-default, #d0d7de);
+    --accent: var(--true-color-blue, #0969da);
+    --accent-muted: var(--true-color-blue-muted, rgba(9,105,218,.12));
+    --ok: var(--true-color-green, #1a7f37);
+    --ok-muted: var(--true-color-green-muted, rgba(26,127,55,.12));
+    --warn: var(--true-color-orange, #bc4c00);
+    --warn-muted: var(--true-color-orange-muted, rgba(188,76,0,.12));
+    --purple: var(--true-color-purple, #8250df);
+    --purple-muted: var(--true-color-purple-muted, rgba(130,80,223,.12));
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    font-size: var(--text-body-medium, 14px); line-height: var(--leading-body-medium, 20px);
+  }
+  main { padding: 14px 16px 40px; max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  h1 { font-size: 16px; font-weight: var(--font-weight-semibold, 600); margin: 0; }
+  h2 { font-size: 13px; font-weight: var(--font-weight-semibold, 600); margin: 0 0 8px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .spacer { flex: 1; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  code, .mono { font-family: var(--font-mono, ui-monospace, Consolas, monospace); font-size: 12px; }
+  input[type=text], textarea, select {
+    font: inherit; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+  }
+  input[type=text]:focus, textarea:focus, select:focus, button:focus-visible { outline: 2px solid var(--color-focus-outline, var(--accent)); outline-offset: -1px; }
+  textarea { width: 100%; resize: vertical; font-family: var(--font-mono, ui-monospace, Consolas, monospace); font-size: 12px; line-height: 18px; }
+  button {
+    font: inherit; font-size: 13px; cursor: pointer; color: var(--fg); background: transparent;
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; white-space: nowrap;
+  }
+  button:hover { background: var(--accent-muted); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--color-white, #fff); }
+  button.primary:hover { filter: brightness(1.08); }
+  button.ghost { border-color: transparent; }
+  button.warn { border-color: var(--warn); color: var(--warn); }
+  .card { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+
+  /* header */
+  .feature { flex: 1; min-width: 180px; font-weight: 600; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+  .busy .dot { background: var(--warn); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  .settings { display: none; gap: 8px; flex-direction: column; }
+  .settings.open { display: flex; }
+  .settings label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+
+  /* stepper */
+  .stepper { display: flex; gap: 0; }
+  .step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; position: relative; padding: 2px 0; background: none; border: none; border-radius: 6px; }
+  .step:hover { background: var(--accent-muted); }
+  .step::before { content: ""; position: absolute; top: 17px; left: -50%; right: 50%; height: 2px; background: var(--border); z-index: 0; }
+  .step:first-child::before { display: none; }
+  .step.done::before, .step.active::before { background: var(--ok); }
+  .bubble { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 15px; border: 2px solid var(--border); background: var(--bg); z-index: 1; }
+  .step.done .bubble { border-color: var(--ok); background: var(--ok-muted); }
+  .step.active .bubble { border-color: var(--accent); background: var(--accent-muted); box-shadow: 0 0 0 4px var(--accent-muted); }
+  .step .label { font-size: 11px; color: var(--muted); text-align: center; }
+  .step.active .label { color: var(--fg); font-weight: 600; }
+  .step .mini { font-size: 10px; color: var(--muted); height: 12px; }
+
+  /* phase */
+  .phase-head { display: flex; gap: 10px; align-items: flex-start; }
+  .phase-icon { font-size: 26px; line-height: 32px; }
+  .phase-title { font-size: 18px; font-weight: 600; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 12px; border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; background: transparent; }
+  .chip.ok { border-color: var(--ok); color: var(--ok); background: var(--ok-muted); }
+  .chip.missing { color: var(--muted); border-style: dashed; }
+  .chip.purple { border-color: var(--purple); color: var(--purple); background: var(--purple-muted); }
+  .progress { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+  .progress > div { height: 100%; background: var(--ok); transition: width .2s; }
+  .checklist { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 4px; }
+  .checklist label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+  .checklist input:checked + span { color: var(--muted); text-decoration: line-through; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 640px) { .split { grid-template-columns: 1fr; } }
+  .tag { font-size: 11px; color: var(--purple); }
+  .snip { cursor: pointer; }
+  .snip:hover { background: var(--accent-muted); }
+
+  /* nav */
+  .nav { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; border-top: 1px solid var(--border); }
+
+  /* activity */
+  .reply { white-space: pre-wrap; max-height: 260px; overflow: auto; font-size: 13px; }
+  .timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+  .timeline li { display: grid; grid-template-columns: 22px 1fr; gap: 6px; font-size: 12px; }
+  .timeline .t { color: var(--muted); }
+  details > summary { cursor: pointer; list-style: none; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary h2 { display: inline; }
+  details > summary::before { content: "▸ "; color: var(--muted); }
+  details[open] > summary::before { content: "▾ "; }
+
+  .toast { position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 6px 14px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; }
+  .toast.show { opacity: .95; }
+  .kbd { font-size: 11px; color: var(--muted); }
+  .wfsel { max-width: 320px; font-weight: 600; }
+  .empty .phase-title { margin-bottom: 4px; }
+  .wflist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+  .wflist li { display: flex; gap: 10px; align-items: center; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+  .chip.here { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); }
+  .spawnbox { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+  .warnText { color: var(--warn); margin-top: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <header class="row">
+    <h1>🧭 Dev workflow</h1>
+    <select id="workflowSel" class="wfsel" title="Workflows in this repo — picking one links the current branch to it"></select>
+    <span id="branch" class="pill mono" title="Current branch"></span>
+    <span class="spacer"></span>
+    <span id="status" class="pill"><span class="dot"></span><span id="statusText">idle</span></span>
+    <button id="toggleSettings" class="ghost" title="Settings">⚙</button>
+  </header>
+
+  <section id="empty" class="card empty" style="display:none">
+    <div id="emptyTitle" class="phase-title"></div>
+    <div class="muted">Workflows are tracked per feature and linked to branches. Start one here, or link this branch to an existing workflow.</div>
+    <div class="row" style="margin-top:12px">
+      <input id="newFeature" type="text" style="flex:1" placeholder="What are we building? (feature name)" />
+      <button id="create" class="primary">Start workflow</button>
+      <button id="cancelNew">Cancel</button>
+    </div>
+    <div id="existingWrap" style="margin-top:16px">
+      <h2>Existing workflows in this repo</h2>
+      <ul id="existing" class="wflist"></ul>
+    </div>
+  </section>
+
+  <div id="wfView" style="display:none; flex-direction:column; gap:14px">
+    <section id="settings" class="settings card">
+      <label>Feature name
+        <input id="feature" type="text" />
+      </label>
+      <label>Extra context (injected into every phase prompt)
+        <textarea id="context" rows="2" placeholder="e.g. ticket link, constraints…"></textarea>
+      </label>
+      <label>Artifacts folder (spec.md &amp; design.md) — leave empty for the shared default
+        <input id="artifactsDir" type="text" class="mono" />
+      </label>
+      <div class="row">
+        <label class="row" style="flex-direction:row; color:var(--fg)"><input id="autoSend" type="checkbox" /> Auto-send instructions when moving to the next phase</label>
+      </div>
+      <div class="row">
+        <span id="storeInfo" class="muted small mono" style="flex:1; word-break:break-all"></span>
+        <button id="unlink">Unlink this branch</button>
+        <button id="reset" class="warn">Reset progress</button>
+      </div>
+    </section>
+
+    <nav id="stepper" class="stepper"></nav>
+
+    <section class="card">
+      <div class="phase-head">
+        <div id="phaseIcon" class="phase-icon"></div>
+        <div style="flex:1">
+          <div class="row"><span id="phaseTitle" class="phase-title"></span><span id="phaseMeta" class="muted small"></span></div>
+          <div id="phaseGoal" class="muted"></div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px; align-items:flex-start">
+        <div id="artifacts" class="chips"></div>
+        <span class="spacer"></span>
+        <div id="branches" class="chips" style="justify-content:flex-end"></div>
+      </div>
+    </section>
+
+    <div class="split">
+      <section class="card">
+        <div class="row"><h2 style="margin:0">Exit criteria</h2><span class="spacer"></span><span id="checkCount" class="muted small"></span></div>
+        <div class="progress" style="margin-top:8px"><div id="checkBar" style="width:0"></div></div>
+        <ul id="checklist" class="checklist"></ul>
+      </section>
+      <section class="card">
+        <h2>Phase notes</h2>
+        <textarea id="notes" rows="5" placeholder="Decisions, links, gotchas… (shared across sessions, available as {{notes}})"></textarea>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="row" style="margin-bottom:8px">
+        <h2 style="margin:0">Phase instructions</h2>
+        <span id="overridden" class="tag"></span>
+        <span class="spacer"></span>
+        <button id="resetPrompt" class="ghost small" title="Restore the default template">↺ Reset</button>
+      </div>
+      <textarea id="instructions" rows="10"></textarea>
+      <div class="row" style="margin-top:8px">
+        <label class="small muted">Mode <select id="mode"></select></label>
+        <span class="spacer"></span>
+        <button id="sendInstructions" class="primary">▶ Send to this chat</button>
+      </div>
+      <div class="spawnbox">
+        <div class="row">
+          <span class="small muted">or run in a separate session with</span>
+          <select id="agent"></select>
+          <button id="refreshAgents" class="ghost" title="Reload custom agents">⟳</button>
+          <span class="spacer"></span>
+          <button id="spawn">⧉ Spin up session</button>
+        </div>
+        <div id="spawnInfo" class="small muted" style="margin-top:6px"></div>
+        <div id="spawnWarn" class="small warnText"></div>
+      </div>
+      <div id="spawned" class="chips" style="margin-top:8px"></div>
+    </section>
+
+    <section class="card">
+      <h2>Talk to the chat</h2>
+      <div id="snippets" class="chips" style="margin-bottom:8px"></div>
+      <textarea id="prompt" rows="3" placeholder="Type a prompt for the current chat…"></textarea>
+      <div class="row" style="margin-top:8px">
+        <span class="kbd">Ctrl/⌘ + Enter to send</span>
+        <span class="spacer"></span>
+        <button id="sendPrompt" class="primary">Send</button>
+      </div>
+    </section>
+
+    <div class="split">
+      <details class="card" open>
+        <summary><h2>Latest reply</h2> <span id="replyAt" class="muted small"></span></summary>
+        <div id="reply" class="reply muted" style="margin-top:8px">No reply yet.</div>
+      </details>
+      <details class="card" open>
+        <summary><h2>Activity</h2> <span class="muted small">(all sessions)</span></summary>
+        <ul id="timeline" class="timeline" style="margin-top:8px"></ul>
+      </details>
+    </div>
+
+    <div class="nav row">
+      <button id="back">◀ Back</button>
+      <span id="navHint" class="muted small"></span>
+      <span class="spacer"></span>
+      <button id="next">Next phase ▶</button>
+      <button id="nextSend" class="primary">Next &amp; send instructions ▶</button>
+    </div>
+  </div>
+</main>
+<div id="toast" class="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let snap = null;
+let shownKey = null;
+let confirmNext = null;
+let creatingNew = false;
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 2400);
+}
+async function post(path, body = {}) {
+  try {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "Request failed");
+    return j.result;
+  } catch (e) { toast("⚠ " + e.message); throw e; }
+}
+function ago(ts) {
+  if (!ts) return "";
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.round(s / 60) + "m ago";
+  if (s < 86400) return Math.round(s / 3600) + "h ago";
+  return Math.round(s / 86400) + "d ago";
+}
+function dur(a, b) {
+  if (!a) return "";
+  const m = Math.round(((b || Date.now()) - a) / 60000);
+  return m < 60 ? m + "m" : Math.floor(m / 60) + "h " + (m % 60) + "m";
+}
+function el(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null) e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k);
+  return e;
+}
+const cur = () => snap.phases.find((p) => p.id === snap.state.currentPhase);
+const curState = () => snap.state.phases[snap.state.currentPhase];
+function setIfIdle(input, value) {
+  value = value ?? "";
+  if (document.activeElement !== input && input.value !== value) input.value = value;
+}
+
+function renderHeader() {
+  const { repo, workflows, state, runtime } = snap;
+  $("branch").textContent = "🌿 " + (repo?.branch || repo?.branchKey || "no branch") + (repo?.dirty ? ` · ${repo.dirty} uncommitted` : "");
+  $("branch").title = repo?.isGit ? `Repo: ${repo.top}` : "Not a git repository — workflow is tied to this session";
+  $("status").classList.toggle("busy", runtime.busy);
+  $("statusText").textContent = (runtime.busy ? "working…" : "idle") + (runtime.mode ? " · " + runtime.mode : "");
+
+  const sel = $("workflowSel");
+  if (document.activeElement !== sel) {
+    sel.replaceChildren(
+      el("option", { value: "" }, state ? "—" : "No workflow on this branch"),
+      ...workflows.map((w) => el("option", { value: w.id }, `${w.feature || w.id} · ${w.phaseTitle || w.currentPhase}`)),
+      el("option", { value: "__new" }, "＋ New workflow…"));
+    sel.options[0].hidden = !!state;
+    sel.value = state ? state.id : "";
+  }
+}
+
+function renderEmpty() {
+  const { workflows } = snap;
+  const list = $("existing"); list.replaceChildren();
+  $("existingWrap").style.display = workflows.length ? "" : "none";
+  for (const w of workflows) {
+    list.append(el("li", {},
+      el("div", { style: "flex:1" },
+        el("div", {}, el("b", {}, w.feature || w.id), el("span", { class: "muted small" }, `  ·  ${w.phaseTitle || w.currentPhase}  ·  ${ago(w.updatedAt)}`)),
+        el("div", { class: "muted small mono" }, "🌿 " + (w.branches.join(", ") || "no branches"))),
+      el("button", { onclick: () => post("/api/link", { id: w.id }).then(() => { creatingNew = false; render(); toast("Branch linked"); }) }, "Link this branch")));
+  }
+}
+
+function render() {
+  renderHeader();
+  const has = !!snap.state && !creatingNew;
+  $("empty").style.display = has ? "none" : "";
+  $("wfView").style.display = has ? "flex" : "none";
+  $("cancelNew").style.display = creatingNew && snap.state ? "" : "none";
+  $("emptyTitle").replaceChildren(...(creatingNew && snap.state
+    ? ["New workflow for ", el("span", { class: "mono" }, snap.repo?.branchKey || "")]
+    : ["No workflow on ", el("span", { class: "mono" }, snap.repo?.branchKey || "")]));
+  if (!has) { renderEmpty(); shownKey = null; return; }
+
+  const { state, phases, runtime, artifacts, modes, repo } = snap;
+  const p = cur(), ps = curState();
+  const idx = phases.indexOf(p);
+  const key = state.id + "/" + p.id;
+  const phaseChanged = shownKey !== key;
+
+  // settings
+  setIfIdle($("feature"), state.feature);
+  setIfIdle($("context"), state.context);
+  setIfIdle($("artifactsDir"), state.artifactsDir || "");
+  $("artifactsDir").placeholder = artifacts.spec ? artifacts.spec.path.replace(/[\\/]spec\.md$/, "") : "";
+  $("autoSend").checked = !!state.autoSendOnNext;
+  $("storeInfo").textContent = `workflow ${state.id}`;
+
+  // stepper
+  const stepper = $("stepper"); stepper.replaceChildren();
+  phases.forEach((ph) => {
+    const s = state.phases[ph.id];
+    const total = (ph.checklist || []).length;
+    const done = (ph.checklist || []).filter((_, j) => s.checks[j]).length;
+    stepper.append(el("button", { class: "step " + s.status, title: ph.goal, onclick: () => post("/api/goto", { phase: ph.id }) },
+      el("div", { class: "bubble" }, s.status === "done" ? "✓" : ph.icon),
+      el("div", { class: "label" }, ph.title),
+      el("div", { class: "mini" }, total ? `${done}/${total}` : "")));
+  });
+
+  // phase header
+  $("phaseIcon").textContent = p.icon;
+  $("phaseTitle").textContent = p.title;
+  $("phaseMeta").textContent = `Phase ${idx + 1} of ${phases.length}` + (ps.startedAt ? ` · ${dur(ps.startedAt)} in phase` : "");
+  $("phaseGoal").textContent = p.goal;
+  const arts = $("artifacts"); arts.replaceChildren();
+  for (const [k, a] of Object.entries(artifacts)) {
+    arts.append(el("span", { class: "chip " + (a.exists ? "ok" : "missing"), title: a.path }, (a.exists ? "✓ " : "○ ") + k + ".md"));
+  }
+  const br = $("branches"); br.replaceChildren();
+  for (const b of state.branches || []) {
+    const mine = b.name === repo.branchKey;
+    const phaseT = b.phase ? (phases.find((x) => x.id === b.phase)?.title || b.phase) : null;
+    br.append(el("span", { class: "chip mono " + (mine ? "here" : b.role === "spawned" ? "purple" : ""), title: `${b.role}${phaseT ? " · " + phaseT : ""} · linked ${ago(b.addedAt)}` },
+      (mine ? "● " : "🌿 ") + b.name + (b.role === "spawned" ? ` (${phaseT || "spawned"})` : "")));
+  }
+
+  // checklist
+  const list = $("checklist"); list.replaceChildren();
+  const items = p.checklist || [];
+  let doneCount = 0;
+  items.forEach((c, i) => {
+    const checked = !!ps.checks[i]; if (checked) doneCount++;
+    const cb = el("input", { type: "checkbox", onchange: (e) => post("/api/check", { phase: p.id, index: i, value: e.target.checked }) });
+    cb.checked = checked;
+    list.append(el("li", {}, el("label", {}, cb, el("span", {}, c))));
+  });
+  if (!items.length) list.append(el("li", { class: "muted small" }, "No exit criteria for this phase."));
+  $("checkCount").textContent = items.length ? `${doneCount}/${items.length}` : "";
+  $("checkBar").style.width = items.length ? (100 * doneCount / items.length) + "%" : "0";
+
+  // notes / instructions
+  if (phaseChanged) { $("notes").value = ps.notes || ""; $("instructions").value = p.rendered; $("prompt").value = ""; }
+  else { setIfIdle($("notes"), ps.notes || ""); setIfIdle($("instructions"), p.rendered); }
+  $("overridden").textContent = p.isOverridden ? "customized" : "";
+  $("resetPrompt").style.visibility = p.isOverridden ? "visible" : "hidden";
+
+  const modeSel = $("mode");
+  if (!modeSel.options.length) modeSel.replaceChildren(el("option", { value: "" }, "keep current"), ...modes.map((m) => el("option", { value: m }, m)));
+  if (document.activeElement !== modeSel) modeSel.value = ps.mode || "";
+
+  // agents & spawn info
+  const agentSel = $("agent"); const prev = agentSel.value;
+  if (document.activeElement !== agentSel) {
+    agentSel.replaceChildren(el("option", { value: "" }, "Default agent"), ...runtime.agents.map((a) => el("option", { value: a.id, title: a.description || "" }, a.name)));
+    agentSel.value = runtime.agents.some((a) => a.id === prev) ? prev : "";
+  }
+  $("spawnInfo").textContent = repo.branch
+    ? `Starts in a new worktree branched from ${repo.branch} (committed state only), linked to this workflow. You'll be notified when it finishes.`
+    : "Starts a new session linked to this workflow.";
+  const warns = [];
+  if (repo.branch && repo.dirty) warns.push(`⚠ ${repo.dirty} uncommitted change(s) here won't be visible there — the chat will ask whether to commit first.`);
+  if (p.writesCode) warns.push("⚠ This phase changes code. In a separate worktree the result lands on another branch that you'll merge back.");
+  $("spawnWarn").textContent = warns.join(" ");
+
+  const sp = $("spawned"); sp.replaceChildren();
+  for (const s of ps.spawned || []) sp.append(el("span", { class: "chip purple", title: new Date(s.at).toLocaleString() }, `⧉ ${s.agent} · ${s.mode || ""} · ${ago(s.at)}`));
+
+  // snippets
+  const sn = $("snippets"); sn.replaceChildren();
+  for (const s of p.snippets || []) sn.append(el("button", { class: "chip snip", onclick: () => { $("prompt").value = s; $("prompt").focus(); } }, s));
+
+  // reply / timeline
+  $("reply").textContent = runtime.lastReply || "No reply yet.";
+  $("reply").classList.toggle("muted", !runtime.lastReply);
+  $("replyAt").textContent = runtime.lastReplyAt ? ago(runtime.lastReplyAt) : "";
+  const icons = { send: "💬", instructions: "▶", spawn: "⧉", phase: "➜", link: "🔗" };
+  const tl = $("timeline"); tl.replaceChildren();
+  for (const h of state.history.slice(0, 50)) {
+    const ph = phases.find((x) => x.id === h.phase);
+    tl.append(el("li", {}, el("span", {}, icons[h.kind] || "•"),
+      el("div", {}, el("div", {}, h.text.split("\n")[0]),
+        el("div", { class: "t" }, `${ph ? ph.title : h.phase || ""}${h.branch && h.branch !== repo.branchKey ? " · " + h.branch : ""} · ${ago(h.at)}`))));
+  }
+  if (!state.history.length) tl.append(el("li", { class: "muted" }, el("span", {}, ""), el("span", {}, "Nothing yet — send the phase instructions to get started.")));
+
+  // nav
+  const last = idx === phases.length - 1;
+  $("back").disabled = idx === 0;
+  if (confirmNext !== $("next")) $("next").textContent = last ? "Finish ✓" : "Next phase ▶";
+  if (confirmNext !== $("nextSend")) $("nextSend").textContent = "Next & send instructions ▶";
+  $("nextSend").style.display = last ? "none" : "";
+  const remaining = items.length - doneCount;
+  $("navHint").textContent = remaining > 0 ? `${remaining} exit criteria open` : items.length ? "All exit criteria met ✓" : "";
+  shownKey = key;
+  if (phaseChanged && confirmNext) { resetConfirm(); render(); }
+}
+
+function resetConfirm() {
+  confirmNext = null;
+  $("next").classList.remove("warn"); $("nextSend").classList.remove("warn");
+}
+function guardedAdvance(send) {
+  const items = cur().checklist || [];
+  const open = items.filter((_, i) => !curState().checks[i]).length;
+  const btn = send ? $("nextSend") : $("next");
+  if (open > 0 && confirmNext !== btn) {
+    resetConfirm(); confirmNext = btn; btn.classList.add("warn"); render();
+    btn.textContent = `${open} open — move on anyway?`;
+    setTimeout(() => { if (confirmNext === btn) { resetConfirm(); render(); } }, 4000);
+    return;
+  }
+  resetConfirm();
+  post("/api/advance", { send }).then((r) => toast(r?.done ? "🎉 Workflow complete!" : send ? "Moved on & sent instructions" : "Moved to next phase"));
+}
+
+// wiring
+const debounce = (fn, ms = 400) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+const saveSettings = debounce((b) => post("/api/settings", b));
+
+$("workflowSel").addEventListener("change", (e) => {
+  const v = e.target.value;
+  if (v === "__new") {
+    e.target.value = snap.state ? snap.state.id : "";
+    creatingNew = true; render(); $("newFeature").focus();
+    return;
+  }
+  if (v && v !== snap.state?.id) post("/api/link", { id: v }).then(() => toast(`Branch linked to that workflow`));
+});
+$("create").addEventListener("click", () => {
+  const v = $("newFeature").value.trim();
+  if (!v) { $("newFeature").focus(); return; }
+  post("/api/create", { feature: v }).then(() => { $("newFeature").value = ""; creatingNew = false; toast("Workflow started"); });
+});
+$("cancelNew").addEventListener("click", () => { creatingNew = false; render(); });
+$("newFeature").addEventListener("keydown", (e) => { if (e.key === "Enter") $("create").click(); });
+
+$("feature").addEventListener("input", (e) => saveSettings({ feature: e.target.value }));
+$("context").addEventListener("input", (e) => saveSettings({ context: e.target.value }));
+$("artifactsDir").addEventListener("change", (e) => post("/api/settings", { artifactsDir: e.target.value }));
+$("autoSend").addEventListener("change", (e) => post("/api/settings", { autoSendOnNext: e.target.checked }));
+$("toggleSettings").addEventListener("click", () => $("settings").classList.toggle("open"));
+function armed(btn, label, action) {
+  btn.addEventListener("click", () => {
+    if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = label; action(); }
+    else { btn.dataset.armed = "1"; btn.textContent = "Click again to confirm"; setTimeout(() => { delete btn.dataset.armed; btn.textContent = label; }, 3000); }
+  });
+}
+armed($("reset"), "Reset progress", () => post("/api/reset").then(() => toast("Progress reset")));
+armed($("unlink"), "Unlink this branch", () => post("/api/unlink").then(() => toast("Branch unlinked")));
+
+const saveNotes = debounce((phase, notes) => post("/api/phase-update", { phase, notes }));
+$("notes").addEventListener("input", (e) => saveNotes(cur().id, e.target.value));
+$("instructions").addEventListener("change", (e) => {
+  const p = cur();
+  if (e.target.value !== p.rendered) post("/api/phase-update", { phase: p.id, promptOverride: e.target.value });
+});
+$("resetPrompt").addEventListener("click", () => post("/api/phase-update", { phase: cur().id, promptOverride: null }).then(() => { shownKey = null; }));
+$("mode").addEventListener("change", (e) => post("/api/phase-update", { phase: cur().id, mode: e.target.value || null }));
+
+$("sendInstructions").addEventListener("click", () => {
+  post("/api/send", { prompt: $("instructions").value, mode: $("mode").value || null, phase: cur().id, kind: "instructions" }).then(() => toast("Sent to chat"));
+});
+$("spawn").addEventListener("click", () => {
+  post("/api/spawn", { phase: cur().id, agent: $("agent").value || null, mode: $("mode").value || "interactive", prompt: $("instructions").value })
+    .then(() => toast("Asked chat to spin up a session"));
+});
+$("refreshAgents").addEventListener("click", () => post("/api/refresh-agents").then(() => toast("Agents reloaded")));
+
+function sendPrompt() {
+  const v = $("prompt").value.trim(); if (!v) return;
+  post("/api/send", { prompt: v, phase: cur().id }).then(() => { $("prompt").value = ""; toast("Sent to chat"); });
+}
+$("sendPrompt").addEventListener("click", sendPrompt);
+$("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendPrompt(); } });
+
+$("back").addEventListener("click", () => post("/api/back"));
+$("next").addEventListener("click", () => guardedAdvance(false));
+$("nextSend").addEventListener("click", () => guardedAdvance(true));
+
+function connect() {
+  const es = new EventSource("/events");
+  es.onmessage = (e) => { snap = JSON.parse(e.data); render(); };
+  es.onerror = () => { es.close(); setTimeout(connect, 1500); };
+}
+connect();
+setInterval(() => snap && render(), 30000);
+</script>
+</body>
+</html>
