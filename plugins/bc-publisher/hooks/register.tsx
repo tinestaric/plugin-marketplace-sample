@@ -54,7 +54,15 @@ async function refreshNow($: any) {
     await update($, alcVersion, () => (tool.label === 'none' ? null : `${tool.label} ${tool.version ?? ''}`.trim()))
     const list: App[] = await publisher.discoverApps()
     await update($, apps, () => list)
-    await update($, selected, (cur: string[]) => cur.filter(p => list.some(a => a.path === p)))
+    const rootDir: string = await publisher.resolvedRoot()
+    await update($, workspace, () => rootDir.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? rootDir)
+    // keep what was ticked; otherwise start with the app you are standing in, so Publish works at once
+    await update($, selected, (cur: string[]) => {
+      const keep = cur.filter(p => list.some(a => a.path === p))
+      if (keep.length) return keep
+      const here = publisher!.currentApp(list)
+      return here ? [here.path] : []
+    })
     const envs: Environment[] = await publisher.discoverEnvironments()
     await update($, environments, () => envs)
     await update($, sourceErrors, () => [...publisher!.errors, ...(tool.ok ? [] : [{ source: 'AL tool', message: tool.hint ?? 'not found' }])])

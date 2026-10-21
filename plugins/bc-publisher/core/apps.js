@@ -3,6 +3,42 @@ import { basename, compareVersions, dirname, joinPath, parseJsonc } from './util
 const SKIP = new Set(['.alpackages', 'node_modules', '.git', '.snapshots', '.altestrunner', 'out', 'bin', 'obj'])
 const MAX_DEPTH = 6
 
+/**
+ * Where the workspace really is. AL developers start a session inside one app (`App`, even `App/src`), but the
+ * workspace file and the sibling apps (`Test`) live above it. Walks up from `start` to the git root: the nearest
+ * folder holding a `.code-workspace` file wins, else the git root, else `start` itself.
+ */
+export async function resolveWorkspaceRoot(io, start) {
+  const norm = p => p.replace(/\\/g, '/').replace(/\/+$/, '')
+  let dir = norm(start)
+  let gitRoot = null
+  let workspaceDir = null
+  for (let i = 0; i < 8 && dir; i++) {
+    let entries
+    try {
+      entries = await io.fs.list(dir)
+    } catch {
+      break
+    }
+    if (!workspaceDir && entries.some(e => e.kind === 'file' && e.name.endsWith('.code-workspace'))) workspaceDir = dir
+    if (entries.some(e => e.name === '.git')) {
+      gitRoot = dir // the repository ends the search: nothing above it belongs to this project
+      break
+    }
+    const parent = dirname(dir)
+    if (!parent || parent === dir || /^[A-Za-z]:?$/.test(parent)) break
+    dir = parent
+  }
+  return workspaceDir ?? gitRoot ?? norm(start)
+}
+
+/** The app whose folder contains `cwd` (the one you are standing in), if any. */
+export function appContaining(apps, cwd) {
+  const norm = p => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+  const here = norm(cwd)
+  return apps.filter(a => here === norm(a.path) || here.startsWith(norm(a.path) + '/')).sort((a, b) => b.path.length - a.path.length)[0] ?? null
+}
+
 /** Folders to scan: the `.code-workspace` folders if one exists in the root, else the root itself. */
 export async function workspaceFolders(io, root) {
   let entries = []
