@@ -5,7 +5,7 @@
     {
       "name": "hello-plugin",
       "source": "./plugins/hello-plugin",
-      "description": "Minimal example plugin demonstrating a skill and an agent shared between Claude Code and GitHub Copilot"
+      "description": "Example plugin: a skill and an agent shared between Claude Code and GitHub Copilot, plus the BC Cockpit and BC Publisher canvases (GitHub Copilot only)"
     }
   ]
 }

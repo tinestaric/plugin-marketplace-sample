@@ -1,0 +1,10 @@
+2026-10-20T10:40:01.1234567Z ==============================================================================
+2026-10-20T10:40:01.1234567Z Task         : PowerShell
+2026-10-20T10:40:01.1234567Z Description  : Run a PowerShell script on Linux, macOS, or Windows
+2026-10-20T10:40:01.1234567Z ==============================================================================
+2026-10-20T10:40:02.0000000Z Compiling app CustomerA
+2026-10-20T10:40:05.0000000Z ##[error]C:\a\1\s\App\src\VatCheck.Codeunit.al(12,9): error AL0118: The name 'VatRegNo' does not exist in the current context
+2026-10-20T10:40:05.0000000Z C:\a\1\s\App\src\VatCheck.Codeunit.al(12,9): error AL0118: The name 'VatRegNo' does not exist in the current context
+2026-10-20T10:40:05.0000000Z C:\a\1\s\App\src\Sales.TableExt.al(4,5): warning AL0432: Field 'Old' is marked for removal
+2026-10-20T10:40:05.0000000Z C:\a\1\s\App\src\Posting.Codeunit.al(88,1): error AL0132: 'Record "Sales Header"' does not contain a definition for 'Foo'
+2026-10-20T10:40:06.0000000Z Compilation ended with 2 errors

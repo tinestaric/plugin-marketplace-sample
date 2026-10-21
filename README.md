@@ -17,6 +17,9 @@ plugins/hello-plugin/
     hello-agent.agent.md
   skills/                           shared by both tools
     hello-skill/SKILL.md            flat: no category subfolders
+  extensions/                       GitHub Copilot only (Claude Code ignores it): canvases, declared by "extensions" in plugin.json
+    bc-cockpit/                     /bc-cockpit: current-sprint work items + PRs across Azure DevOps orgs
+    bc-publisher/                   /bc-publisher: compile/publish AL apps to containers and SaaS sandboxes
   .mcp.json                         MCP servers, shared by both tools
 examples/
   user-settings.claude.jsonc    goes in your Claude Code user settings (~/.claude/settings.json)

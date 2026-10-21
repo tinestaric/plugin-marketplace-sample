@@ -1,0 +1,531 @@
+{
+  "connectionData": {
+    "authenticatedUser": {
+      "id": "me-1",
+      "providerDisplayName": "Dev Eloper"
+    }
+  },
+  "projects": {
+    "count": 2,
+    "value": [
+      {
+        "id": "p-a",
+        "name": "CustomerA-BC"
+      },
+      {
+        "id": "p-b",
+        "name": "Product Core"
+      }
+    ]
+  },
+  "processes": {
+    "count": 2,
+    "value": [
+      {
+        "typeId": "proc-agile",
+        "name": "Agile"
+      },
+      {
+        "typeId": "proc-custom",
+        "name": "Custom"
+      }
+    ]
+  },
+  "witsAgile": {
+    "value": [
+      {
+        "name": "User Story",
+        "states": [
+          {
+            "name": "New",
+            "stateCategory": "Proposed"
+          },
+          {
+            "name": "Active",
+            "stateCategory": "InProgress"
+          },
+          {
+            "name": "Resolved",
+            "stateCategory": "Resolved"
+          },
+          {
+            "name": "Closed",
+            "stateCategory": "Completed"
+          },
+          {
+            "name": "Removed",
+            "stateCategory": "Removed"
+          },
+          {
+            "name": "Completed",
+            "stateCategory": "Completed"
+          }
+        ]
+      }
+    ]
+  },
+  "witsCustom": {
+    "value": [
+      {
+        "name": "Task",
+        "states": [
+          {
+            "name": "To Do",
+            "stateCategory": "Proposed"
+          },
+          {
+            "name": "Completed",
+            "stateCategory": "InProgress"
+          },
+          {
+            "name": "Done",
+            "stateCategory": "Completed"
+          }
+        ]
+      }
+    ]
+  },
+  "wiql": {
+    "workItems": [
+      {
+        "id": 101
+      },
+      {
+        "id": 102
+      },
+      {
+        "id": 103
+      },
+      {
+        "id": 104
+      }
+    ]
+  },
+  "workitemsbatch": {
+    "value": [
+      {
+        "id": 101,
+        "fields": {
+          "System.Id": 101,
+          "System.Title": "Fix posting routine",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.TeamProject": "CustomerA-BC",
+          "System.IterationPath": "CustomerA-BC\\Sprint 4",
+          "Microsoft.VSTS.Common.Priority": 2,
+          "System.ChangedDate": "2026-10-20T10:00:00Z"
+        }
+      },
+      {
+        "id": 102,
+        "fields": {
+          "System.Id": 102,
+          "System.Title": "Urgent hotfix",
+          "System.WorkItemType": "User Story",
+          "System.State": "New",
+          "System.TeamProject": "CustomerA-BC",
+          "System.IterationPath": "CustomerA-BC\\Sprint 3",
+          "Microsoft.VSTS.Common.Priority": 1,
+          "System.ChangedDate": "2026-10-18T10:00:00Z"
+        }
+      },
+      {
+        "id": 103,
+        "fields": {
+          "System.Id": 103,
+          "System.Title": "Write tests",
+          "System.WorkItemType": "Task",
+          "System.State": "Completed",
+          "System.TeamProject": "Product Core",
+          "System.IterationPath": "Product Core\\Release\\Sprint 9",
+          "System.ChangedDate": "2026-10-19T10:00:00Z"
+        }
+      },
+      {
+        "id": 104,
+        "fields": {
+          "System.Id": 104,
+          "System.Title": "Old story",
+          "System.WorkItemType": "User Story",
+          "System.State": "Completed",
+          "System.TeamProject": "CustomerA-BC",
+          "System.IterationPath": "CustomerA-BC\\Sprint 4",
+          "Microsoft.VSTS.Common.Priority": 3,
+          "System.ChangedDate": "2026-10-17T10:00:00Z"
+        }
+      }
+    ]
+  },
+  "typeStatesTask": {
+    "value": [
+      {
+        "name": "To Do",
+        "category": "Proposed"
+      },
+      {
+        "name": "Completed",
+        "category": "InProgress"
+      },
+      {
+        "name": "Done",
+        "category": "Completed"
+      }
+    ]
+  },
+  "typeStatesStory": {
+    "value": [
+      {
+        "name": "Active",
+        "category": "InProgress"
+      },
+      {
+        "name": "Completed",
+        "category": "Completed"
+      }
+    ]
+  },
+  "prsCreatorA": {
+    "value": [
+      {
+        "pullRequestId": 7,
+        "title": "Add VAT validation",
+        "isDraft": false,
+        "mergeStatus": "conflicts",
+        "creationDate": "2026-10-19T09:00:00Z",
+        "sourceRefName": "refs/heads/feature/vat",
+        "targetRefName": "refs/heads/main",
+        "createdBy": {
+          "id": "me-1",
+          "displayName": "Dev Eloper"
+        },
+        "repository": {
+          "name": "customer-a-app",
+          "webUrl": "https://dev.azure.com/contoso/CustomerA-BC/_git/customer-a-app",
+          "id": "repo-a"
+        },
+        "reviewers": [
+          {
+            "id": "r-1",
+            "vote": 10
+          },
+          {
+            "id": "r-2",
+            "vote": 0,
+            "isRequired": false
+          }
+        ]
+      }
+    ]
+  },
+  "prsReviewerA": {
+    "value": [
+      {
+        "pullRequestId": 7,
+        "title": "Add VAT validation",
+        "isDraft": false,
+        "mergeStatus": "conflicts",
+        "creationDate": "2026-10-19T09:00:00Z",
+        "sourceRefName": "refs/heads/feature/vat",
+        "targetRefName": "refs/heads/main",
+        "createdBy": {
+          "id": "me-1",
+          "displayName": "Dev Eloper"
+        },
+        "repository": {
+          "name": "customer-a-app",
+          "webUrl": "https://dev.azure.com/contoso/CustomerA-BC/_git/customer-a-app",
+          "id": "repo-a"
+        },
+        "reviewers": [
+          {
+            "id": "r-1",
+            "vote": 10
+          },
+          {
+            "id": "me-1",
+            "vote": 0
+          }
+        ]
+      },
+      {
+        "pullRequestId": 9,
+        "title": "Refactor price calc",
+        "isDraft": true,
+        "mergeStatus": "succeeded",
+        "creationDate": "2026-10-20T09:00:00Z",
+        "sourceRefName": "refs/heads/dev/price",
+        "targetRefName": "refs/heads/main",
+        "createdBy": {
+          "id": "x-9",
+          "displayName": "Colleague"
+        },
+        "repository": {
+          "name": "customer-a-app",
+          "webUrl": "https://dev.azure.com/contoso/CustomerA-BC/_git/customer-a-app",
+          "id": "repo-a"
+        },
+        "reviewers": [
+          {
+            "id": "me-1",
+            "vote": 0
+          },
+          {
+            "id": "r-3",
+            "vote": -5
+          }
+        ]
+      }
+    ]
+  },
+  "buildsA": {
+    "value": [
+      {
+        "id": 501,
+        "buildNumber": "20261020.3",
+        "status": "completed",
+        "result": "failed",
+        "sourceBranch": "refs/pull/7/merge",
+        "sourceVersion": "mergecommit",
+        "definition": {
+          "id": 11,
+          "name": "CustomerA CI"
+        },
+        "requestedFor": {
+          "id": "svc",
+          "displayName": "Build Service"
+        },
+        "repository": {
+          "id": "repo-a",
+          "type": "TfsGit",
+          "name": "customer-a-app"
+        },
+        "finishTime": "2026-10-20T11:00:00Z",
+        "_links": {
+          "web": {
+            "href": "https://dev.azure.com/contoso/CustomerA-BC/_build/results?buildId=501"
+          }
+        }
+      },
+      {
+        "id": 500,
+        "buildNumber": "20261020.2",
+        "status": "completed",
+        "result": "succeeded",
+        "sourceBranch": "refs/pull/7/merge",
+        "definition": {
+          "id": 11,
+          "name": "CustomerA CI"
+        },
+        "requestedFor": {
+          "id": "svc"
+        },
+        "repository": {
+          "id": "repo-a",
+          "type": "TfsGit"
+        }
+      },
+      {
+        "id": 499,
+        "buildNumber": "20261020.1",
+        "status": "inProgress",
+        "result": null,
+        "sourceBranch": "refs/heads/main",
+        "definition": {
+          "id": 12,
+          "name": "Nightly"
+        },
+        "requestedFor": {
+          "id": "me-1",
+          "displayName": "Dev Eloper"
+        },
+        "repository": {
+          "id": "repo-a",
+          "type": "TfsGit"
+        },
+        "startTime": "2026-10-20T10:00:00Z"
+      },
+      {
+        "id": 498,
+        "buildNumber": "20261019.9",
+        "status": "completed",
+        "result": "failed",
+        "sourceBranch": "refs/heads/someone-else",
+        "definition": {
+          "id": 13,
+          "name": "Other team CI"
+        },
+        "requestedFor": {
+          "id": "x-9"
+        },
+        "repository": {
+          "id": "repo-a",
+          "type": "TfsGit"
+        }
+      }
+    ]
+  },
+  "buildsB": {
+    "value": []
+  },
+  "repositoriesA": {
+    "value": [
+      {
+        "id": "repo-a",
+        "name": "customer-a-app",
+        "remoteUrl": "https://contoso@dev.azure.com/contoso/CustomerA-BC/_git/customer-a-app",
+        "webUrl": "https://dev.azure.com/contoso/CustomerA-BC/_git/customer-a-app"
+      }
+    ]
+  },
+  "build501": {
+    "id": 501,
+    "buildNumber": "20261020.3",
+    "result": "failed",
+    "sourceBranch": "refs/pull/7/merge",
+    "sourceVersion": "mergecommit",
+    "definition": {
+      "id": 11,
+      "name": "CustomerA CI"
+    },
+    "repository": {
+      "id": "repo-a",
+      "type": "TfsGit",
+      "name": "customer-a-app"
+    },
+    "triggerInfo": {},
+    "_links": {
+      "web": {
+        "href": "https://dev.azure.com/contoso/CustomerA-BC/_build/results?buildId=501"
+      }
+    }
+  },
+  "timeline501": {
+    "records": [
+      {
+        "id": "j1",
+        "type": "Job",
+        "name": "Build",
+        "result": "failed",
+        "log": {
+          "id": 1
+        }
+      },
+      {
+        "id": "t3",
+        "type": "Task",
+        "name": "Run tests",
+        "result": "failed",
+        "startTime": "2026-10-20T10:50:00Z",
+        "order": 5,
+        "log": {
+          "id": 12
+        },
+        "issues": [
+          {
+            "type": "error",
+            "message": "PowerShell exited with code '1'."
+          }
+        ]
+      },
+      {
+        "id": "t2",
+        "type": "Task",
+        "name": "Compile app",
+        "result": "failed",
+        "startTime": "2026-10-20T10:40:00Z",
+        "order": 3,
+        "log": {
+          "id": 11
+        },
+        "issues": []
+      },
+      {
+        "id": "t1",
+        "type": "Task",
+        "name": "Checkout",
+        "result": "succeeded",
+        "startTime": "2026-10-20T10:30:00Z",
+        "order": 1,
+        "log": {
+          "id": 10
+        }
+      }
+    ]
+  },
+  "pr7": {
+    "pullRequestId": 7,
+    "sourceRefName": "refs/heads/feature/vat",
+    "lastMergeSourceCommit": {
+      "commitId": "abc123def4567890"
+    }
+  },
+  "iterationsA": {
+    "name": "CustomerA-BC",
+    "children": [
+      {
+        "name": "Sprint 3",
+        "attributes": {
+          "startDate": "2026-10-05T00:00:00Z",
+          "finishDate": "2026-10-16T00:00:00Z"
+        }
+      },
+      {
+        "name": "Sprint 4",
+        "attributes": {
+          "startDate": "2026-10-19T00:00:00Z",
+          "finishDate": "2026-10-30T00:00:00Z"
+        }
+      },
+      {
+        "name": "Backlog"
+      }
+    ]
+  },
+  "iterationsB": {
+    "name": "Product Core",
+    "children": [
+      {
+        "name": "Release",
+        "children": [
+          {
+            "name": "Sprint 9",
+            "attributes": {
+              "startDate": "2026-10-12T00:00:00Z",
+              "finishDate": "2026-10-21T00:00:00Z"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "conflicts7": {
+    "value": [
+      {
+        "conflictId": 1,
+        "conflictType": "editEdit",
+        "conflictPath": "/src/Vat/VatCheck.Codeunit.al"
+      },
+      {
+        "conflictId": 2,
+        "conflictType": "editEdit",
+        "conflictPath": "/app.json"
+      }
+    ]
+  },
+  "pr7full": {
+    "pullRequestId": 7,
+    "title": "Add VAT validation",
+    "sourceRefName": "refs/heads/feature/vat",
+    "targetRefName": "refs/heads/main",
+    "mergeStatus": "conflicts",
+    "repository": {
+      "name": "customer-a-app"
+    },
+    "lastMergeSourceCommit": {
+      "commitId": "abc123def4567890"
+    },
+    "lastMergeTargetCommit": {
+      "commitId": "fed987"
+    }
+  }
+}
