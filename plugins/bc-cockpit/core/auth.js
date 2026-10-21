@@ -18,7 +18,7 @@ export function createAuth(io) {
     // `az` is az.cmd on Windows, which no-shell process APIs cannot start: the last candidate goes through cmd.exe.
     for (const prefix of [['az'], ['az.cmd'], ['cmd.exe', '/d', '/c', 'az']]) {
       try {
-        const r = await io.run([...prefix, ...args], { timeoutMs: 20000 })
+        const r = await io.run([...prefix, ...args], { timeoutMs: 60000 })
         const token = r.stdout.trim()
         if (r.exitCode === 0 && token) return { header: `Bearer ${token}`, via: 'az' }
         lastError = r.stderr.trim().split('\n').pop() || `exit ${r.exitCode}`

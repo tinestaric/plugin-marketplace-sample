@@ -3,10 +3,16 @@ import { GUID, errorMessage, parseJsonc } from './util.js'
 export const ADMIN_API = 'v2.29' // current at time of writing; override with "adminApiVersion" in config
 const BC_RESOURCE = 'https://api.businesscentral.dynamics.com'
 
-/** Stable ids: container:<name>, saas:<tenant>/<environment>, onprem:<host>/<instance>. */
+/** Stable ids: container:<name>, saas:<tenant>/<environment>, onprem:<host>[:<port>]/<instance>[?<tenant>]. */
 export const containerId = name => `container:${name.toLowerCase()}`
 export const saasId = (tenant, env) => `saas:${String(tenant).toLowerCase()}/${String(env).toLowerCase()}`
-export const onpremId = (server, instance) => `onprem:${String(server).toLowerCase().replace(/^https?:\/\//, '').replace(/[/:]+$/, '')}/${String(instance).toLowerCase()}`
+// A permission (allowPublish, agentMayPublish, isProduction) is keyed by this id, so it must tell targets apart:
+// the same server with another port, instance or tenant is another target.
+export const onpremId = (server, instance, port, tenant) => {
+  const host = String(server).toLowerCase().replace(/^https?:\/\//, '').replace(/[/:]+$/, '')
+  const t = tenant && tenant !== 'default' ? `?${String(tenant).toLowerCase()}` : ''
+  return `onprem:${host}${port ? `:${port}` : ''}/${String(instance).toLowerCase()}${t}`
+}
 
 // ── launch.json ───────────────────────────────────────────────────────────
 
@@ -35,7 +41,7 @@ export function parseLaunch(text, source) {
     } else if (c.server) {
       out.push({
         ...common,
-        id: onpremId(c.server, c.serverInstance ?? 'BC'),
+        id: onpremId(c.server, c.serverInstance ?? 'BC', c.port, c.tenant),
         kind: 'onprem',
         isProduction: false,
         details: {
@@ -97,7 +103,7 @@ export async function bcToken(io, tenant) {
   // On Windows `az` is az.cmd, which no-shell process APIs cannot start: the last candidate goes through cmd.exe.
   for (const prefix of [['az'], ['az.cmd'], ['cmd.exe', '/d', '/c', 'az']]) {
     try {
-      const r = await io.run([...prefix, ...args], { timeoutMs: 30000 })
+      const r = await io.run([...prefix, ...args], { timeoutMs: 60000 })
       if (r.exitCode === 0 && r.stdout.trim()) return r.stdout.trim()
       last = r.stderr.trim().split('\n').pop() || `exit ${r.exitCode}`
     } catch (e) {
@@ -172,7 +178,13 @@ export function mergeEnvironments(launch, containers, saas, tenants = []) {
       // a launch.json "server" that is a local container is that container
       const host = l.details.server.replace(/^https?:\/\//, '').replace(/[:/].*$/, '').toLowerCase()
       const c = containers.find(c => c.details.name.toLowerCase() === host)
-      if (c) entry = { ...l, id: c.id, kind: 'container', details: { ...c.details, ...l.details } }
+      // only the container's own endpoint (its port, instance BC, default tenant) is that container; anything else
+      // on the same host is a different target and keeps its own id (and its own permissions)
+      const isOwnEndpoint =
+        (!l.details.port || Number(l.details.port) === c?.details.port) &&
+        String(l.details.serverInstance ?? 'BC').toUpperCase() === 'BC' &&
+        (l.details.tenant ?? 'default') === 'default'
+      if (c && isOwnEndpoint) entry ={ ...l, id: c.id, kind: 'container', details: { ...c.details, ...l.details } }
     }
     add(entry)
   }

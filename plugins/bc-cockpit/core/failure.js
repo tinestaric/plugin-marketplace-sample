@@ -5,6 +5,19 @@ const AL_DIAGNOSTIC = /\b(error|warning) AL\d{4}\b/
 const TEST_FAIL_START = /(Error Message:|Test (?:Failure|failed)|\[FAIL\]|^\s*Failure\b|##\[error\].*(?:test|codeunit))/i
 const strip = line => line.replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z\s?/, '').replace(/\u001b\[[0-9;]*m/g, '')
 
+/** The log endpoint answers {"count":n,"value":[line,...]} whenever JSON is accepted: unwrap it to plain lines. */
+export function logText(text) {
+  if (text.trimStart().startsWith('{"count"')) {
+    try {
+      const parsed = JSON.parse(text)
+      if (Array.isArray(parsed.value)) return parsed.value.join('\n')
+    } catch {
+      /* not an envelope after all */
+    }
+  }
+  return text
+}
+
 /**
  * Keeps what matters from one step's log:
  *  - AL compiler diagnostics (error/warning ALxxxx, with their file paths)
@@ -20,12 +33,14 @@ export function trimStepLog(text) {
   }
 
   for (let i = 0; i < lines.length; i++) {
-    if (!TEST_FAIL_START.test(lines[i]) || AL_DIAGNOSTIC.test(lines[i])) continue
+    // a line that names an AL code is a compiler diagnostic (already collected), not the start of a test failure
+    if (!TEST_FAIL_START.test(lines[i]) || /\bAL\d{4}\b/.test(lines[i])) continue
     const block = [lines[i]]
     // include the codeunit/method header just above, then the message and call stack below
     for (let b = i - 1; b >= Math.max(0, i - 2) && /codeunit|method|test/i.test(lines[b]); b--) block.unshift(lines[b])
     let j = i + 1
-    while (j < lines.length && block.length < 16 && (lines[j].trim() !== '' || /call stack/i.test(lines[j - 1] ?? ''))) block.push(lines[j++])
+    // ...up to a blank line or the pipeline's own markers (##[error], ##[section])
+    while (j < lines.length && block.length < 16 && !lines[j].startsWith('##[') && (lines[j].trim() !== '' || /call stack/i.test(lines[j - 1] ?? ''))) block.push(lines[j++])
     out.push(block.join('\n').trimEnd())
     i = j
   }
@@ -57,7 +72,7 @@ export async function getFailureDetails(io, client, repoRoots, { org, project, b
   for (const record of failed) {
     let log = ''
     try {
-      log = trimStepLog(await client.request(record.log.url, { raw: true }))
+      log = trimStepLog(logText(await client.request(record.log.url, { raw: true })))
     } catch (err) {
       log = `(could not fetch log: ${err.message})`
     }

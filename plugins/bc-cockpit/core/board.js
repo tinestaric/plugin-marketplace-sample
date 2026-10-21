@@ -29,7 +29,7 @@ export const sortWorkItems = list =>
   [...list].sort((a, b) => a.project.localeCompare(b.project) || a.priority - b.priority || String(b.changed).localeCompare(String(a.changed)))
 
 /** Fetches one organisation; every sub-call that fails lands in `errors` instead of throwing. */
-export async function fetchOrganisation(client, org, scope, errors) {
+export async function fetchOrganisation(client, org, scope, errors, { closedStates } = {}) {
   const note = (what, e) => errors.push({ org: org.name, scope: what, message: errorMessage(e) })
 
   let meId
@@ -48,7 +48,7 @@ export async function fetchOrganisation(client, org, scope, errors) {
   }
 
   const [workItems, perProject] = await Promise.all([
-    client.workItems(org.name).catch(e => (note('work items', e), [])),
+    client.workItems(org.name, { projects: org.projects, closedStates }).catch(e => (note('work items', e), [])),
     mapLimit(projects, CONCURRENCY, async project => {
       const [prs, builds] = await Promise.all([
         client.pullRequests(org.name, project, meId).catch(e => (note(`PRs in ${project}`, e), [])),
@@ -62,14 +62,15 @@ export async function fetchOrganisation(client, org, scope, errors) {
   ])
 
   const pullRequests = perProject.flatMap(p => p.prs)
-  const prBranches = new Set(pullRequests.map(pr => `${pr.project}/${pr.repoId}/${pr.source}`))
+  // PR-validation builds run on refs/pull/<id>/merge, requested by a service account: they belong to my PR
+  const prBranches = new Set(pullRequests.flatMap(pr => [`${pr.project}/${pr.repoId}/${pr.source}`, `${pr.project}/${pr.repoId}/refs/pull/${pr.id}/merge`]))
   const pipelines = perProject.flatMap(p => filterPipelines(p.builds, { scope, meId, prBranches }))
   return { workItems, pullRequests, pipelines }
 }
 
 export async function buildBoard(client, config, now) {
   const errors = []
-  const parts = await Promise.all(config.organisations.map(org => fetchOrganisation(client, org, config.pipelineScope, errors)))
+  const parts = await Promise.all(config.organisations.map(org => fetchOrganisation(client, org, config.pipelineScope, errors, { closedStates: config.closedStates })))
   return {
     workItems: sortWorkItems(parts.flatMap(p => p.workItems)),
     pullRequests: parts.flatMap(p => p.pullRequests),

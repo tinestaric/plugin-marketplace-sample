@@ -51,7 +51,7 @@ export function buildErrorPrompt(run) {
   const shown = (errors.length ? errors : run.diagnostics ?? []).slice(0, 25)
   const diag = shown.length
     ? shown.map(d => `- ${d.file ? `${d.file}${d.line ? `(${d.line},${d.column ?? 1})` : ''}: ` : ''}${d.severity} ${d.code}: ${d.message}`).join('\n')
-    : (run.tail ?? []).slice(-20).join('\n') || '(no output captured)'
+    : [run.error, ...(run.tail ?? []).slice(-20)].filter(Boolean).join('\n') || '(no output captured)'
   const compileOnly = !run.environmentId
   const what = `${run.appName ?? 'the app'} ${run.appVersion ?? ''}`.trim()
   const folder = run.appPath ?? 'the app folder'

@@ -15,6 +15,8 @@ const expandedAtom = atom({ plugin: 'bc-cockpit', key: 'expanded' } as const, nu
 const showSucceeded = atom({ plugin: 'bc-cockpit', key: 'showSucceeded' } as const, false)
 const showErrors = atom({ plugin: 'bc-cockpit', key: 'showErrors' } as const, false)
 
+// Build ids repeat across organisations (and projects): every cache, expansion and button is keyed by all three.
+const bkey = (p: { org: string; project: string; buildId: number }) => `${p.org}/${p.project}/${p.buildId}`
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, Math.max(1, n - 1)) + '…' : s)
 const ago = (iso: string | number | undefined, now: number) => {
   const t = typeof iso === 'number' ? iso : Date.parse(iso ?? '')
@@ -52,7 +54,7 @@ async function refresh($: any, force: boolean): Promise<Board> {
 }
 
 async function loadDetail($: any, p: Pipeline): Promise<Detail> {
-  const key = String(p.buildId)
+  const key = bkey(p)
   const existing = (await read($, detailsAtom))[key]
   if (existing) return existing
   let detail: Detail
@@ -66,7 +68,7 @@ async function loadDetail($: any, p: Pipeline): Promise<Detail> {
 }
 
 async function showDetails($: any, p: Pipeline) {
-  await update($, expandedAtom, (cur: string | null) => (cur === String(p.buildId) ? null : String(p.buildId)))
+  await update($, expandedAtom, (cur: string | null) => (cur === bkey(p) ? null : bkey(p)))
   await $.ui.open({ id: PANE, title: 'Cockpit', focus: true })
   await loadDetail($, p)
 }
@@ -180,7 +182,7 @@ export const register: Register = on => {
       <Box flexWrap="wrap" columnGap={1}>
         <Text color={hasFailures ? 'red' : 'green'}>{summarise(board)}</Text>
         {failed.map((p, i) => (
-          <Button key={`fail-${p.buildId}`} hotkey={String(i + 1)} label={`${i + 1} ${clip(p.definition, 18)}`} onPress={() => showDetails($, p)} />
+          <Button key={`fail-${bkey(p)}`} hotkey={String(i + 1)} label={`${i + 1} ${clip(p.definition, 18)}`} onPress={() => showDetails($, p)} />
         ))}
         <Button key="open" plain dimColor label="/cockpit" onPress={() => $.ui.open({ id: PANE, title: 'Cockpit', focus: true })} />
       </Box>
@@ -287,7 +289,7 @@ export const register: Register = on => {
       <Section title="Pipelines" count={board.pipelines.length}>
         {board.pipelines.length === 0 && <Text dimColor>No pipelines in scope.</Text>}
         {failed.map(p => {
-          const key = String(p.buildId)
+          const key = bkey(p)
           const detail = details[key]
           return (
             <Box key={`pl-${key}`} flexDirection="column">

@@ -17,7 +17,8 @@ const selected = atom({ plugin: 'bc-publisher', key: 'selected' } as const, [])
 const lastRuns = atom({ plugin: 'bc-publisher', key: 'lastRuns' } as const, {})
 const sourceErrors = atom({ plugin: 'bc-publisher', key: 'sourceErrors' } as const, [])
 const isLoading = atom({ plugin: 'bc-publisher', key: 'isLoading' } as const, false)
-const syncMode = atom({ plugin: 'bc-publisher', key: 'syncMode' } as const, 'Add')
+// 'Auto' = untouched: the target decides (launch.json schemaUpdateMode, else Add)
+const syncMode = atom({ plugin: 'bc-publisher', key: 'syncMode' } as const, 'Auto')
 const jobAtom = atom({ plugin: 'bc-publisher', key: 'job' } as const, null)
 const tick = atom({ plugin: 'bc-publisher', key: 'tick' } as const, 0)
 const showLog = atom({ plugin: 'bc-publisher', key: 'showLog' } as const, false)
@@ -38,7 +39,14 @@ const json = (value: unknown) => text(JSON.stringify(value))
 
 // ── data ───────────────────────────────────────────────────────────────────
 
-async function refreshAll($: any) {
+// The refresh in flight, so a command that needs the apps can wait for it instead of racing it.
+let discovering: Promise<void> | undefined
+function refreshAll($: any): Promise<void> {
+  discovering = refreshNow($)
+  return discovering
+}
+
+async function refreshNow($: any) {
   if (!publisher) return
   await update($, isLoading, () => true)
   try {
@@ -117,7 +125,10 @@ async function recordResult($: any, run: Run) {
 /** Compile + publish each app (in the order given) to one target. Resolves the run records. */
 async function runPublish($: any, appPaths: string[], environmentId: string, o: { requestedBy: string; mode?: string; skipCompile?: boolean }): Promise<Run[]> {
   const env: Environment | undefined = (await read($, environments)).find((e: Environment) => e.id === environmentId)
-  const mode = o.mode ?? (await read($, syncMode))
+  // Only a mode somebody chose is explicit: the pane's selector once it has been touched, or what the agent asked for.
+  // An untouched selector, and every agent call that names none, defer to the target's own default in core.
+  const chosen = await read($, syncMode)
+  const mode = o.mode ?? (o.requestedBy === 'agent' || chosen === 'Auto' ? undefined : chosen)
   const names = await Promise.all(appPaths.map(async p => (await resolveApp($, p))?.name ?? p))
   await beginJob($, {
     id: String(await $.clock.now()),
@@ -233,8 +244,19 @@ function agentBlock(env: Environment | undefined): string | null {
 
 /** What the Bash/PowerShell guard decides for a command that publishes outside the publisher. */
 function publishAttempt(command: string, envs: Environment[]): { reason: string } | null {
-  const isPublish = /Publish-BcContainerApp|Publish-NAVApp|\/dev\/apps\b/i.test(command)
+  // The publisher's own engine counts too: `al publishapp` / `altool publishapp`, bare or by quoted path.
+  const altool = /(?:^|[\s"'\\/])(?:al|altool)(?:\.exe)?["']?\s+publishapp\b/i.test(command)
+  const isPublish = altool || /Publish-BcContainerApp|Publish-NAVApp|\/dev\/apps\b/i.test(command)
   if (!isPublish) return null
+  if (altool) {
+    // production by name or by type is refused outright; so is any SaaS target this list cannot vouch for
+    const named = command.match(/--environmentname\s+["']?([^\s"']+)/i)?.[1]?.toLowerCase()
+    const isProdType = /--environmenttype\s+["']?production/i.test(command)
+    const known = named ? envs.find(x => x.kind === 'saas' && x.details.environmentName?.toLowerCase() === named) : undefined
+    if (isProdType || (named && (!known || known.isProduction || known.type !== 'Sandbox'))) {
+      return { reason: `Publishing to ${named ?? 'production'} is blocked: it is a production environment or its type cannot be determined. Production is never published to from here.` }
+    }
+  }
   const container = command.match(/-containerName\s+['"]?([\w.-]+)/i)?.[1]
   const dev = command.match(/\/v2\.0\/([^/\s'"]+)\/([^/\s'"]+)\/dev\/apps/i)
   const id = container ? `container:${container.toLowerCase()}` : dev ? `saas:${dev[1].toLowerCase()}/${dev[2].toLowerCase()}` : null
@@ -302,7 +324,13 @@ export const register: Register = on => {
   // ── /publish ─────────────────────────────────────────────────────────────
 
   on('command.run', { command: 'publish' }, async ($, e) => {
-    const [verb, a, b] = e.args.trim().split(/\s+/)
+    // words, or "quoted phrases" (app names and Windows paths contain spaces)
+    const [verb, a, b] = [...e.args.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map(m => m[1] ?? m[2] ?? m[3])
+    // the first discovery runs from session start: wait for it, and run one if there has been none
+    if (verb === 'compile' || verb === 'publish') {
+      await discovering
+      if ((await read($, apps)).length === 0) await refreshAll($)
+    }
     if (verb === 'compile' && a) {
       const r = await runCompile($, a, 'user').catch(err => ({ error: String(err) }))
       return { text: JSON.stringify(r, null, 1) }
@@ -322,7 +350,12 @@ export const register: Register = on => {
 
   // ── tools: the same functions the buttons call ───────────────────────────
 
-  on('tool.call', { tool: 'mcp__bc-publisher__publisher_list_apps' }, async $ => json((await publisher!.discoverApps()).map(({ id, name, publisher: pub, version, path, dependsOn, idRanges }: any) => ({ id, name, publisher: pub, version, path, dependsOn, idRanges }))))
+  on('tool.call', { tool: 'mcp__bc-publisher__publisher_list_apps' }, async $ => {
+    const list: App[] = await publisher!.discoverApps()
+    // what the tool lists is what compile and publish accept: keep the shared list in step
+    await update($, apps, () => list)
+    return json(list.map(({ id, name, publisher: pub, version, path, dependsOn, idRanges }: any) => ({ id, name, publisher: pub, version, path, dependsOn, idRanges })))
+  })
 
   on('tool.call', { tool: 'mcp__bc-publisher__publisher_list_environments' }, async $ => {
     const envs: Environment[] = await publisher!.discoverEnvironments()
@@ -384,13 +417,32 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const job = await read($, jobAtom)
-    if (e.props.hasSurvey || !job) return next(e)
-    const running = job.stage !== 'done' && job.stage !== 'failed'
-    if (!running && (job.stage === 'done' || (await read($, isBandDismissed)))) return next(e)
-    await read($, tick)
-    const now = await $.clock.now()
+    if (e.props.hasSurvey) return next(e)
+    const running = !!job && job.stage !== 'done' && job.stage !== 'failed'
+    const showsFailure = !!job && job.stage === 'failed' && !(await read($, isBandDismissed))
     const { Box, Text, Button } = $.ui.resolve(e)
     const envs: Environment[] = await read($, environments)
+
+    if (!running && !showsFailure) {
+      // Idle: say the mod is here, but only where there are AL apps, and keep it to one quiet line.
+      const appList: App[] = await read($, apps)
+      if (appList.length === 0) return next(e)
+      const readOnly = envs.filter(x => x.isProduction).length
+      const last = job?.stage === 'done' ? job : null
+      return (
+        <Box columnGap={1}>
+          {last && <Text color="green">✓ {last.run?.environmentId ? 'Published' : 'Compiled'} {clip(last.title, 30)} ·</Text>}
+          <Text dimColor>
+            BC Publisher · {appList.length} app{appList.length === 1 ? '' : 's'} · {envs.length} target{envs.length === 1 ? '' : 's'}
+            {readOnly ? ` (${readOnly} read-only)` : ''}
+          </Text>
+          <Button key="open" plain label="/publish" onPress={() => $.ui.open({ id: PANE, title: 'Publisher', focus: true })} />
+        </Box>
+      )
+    }
+    if (!job) return next(e)
+    await read($, tick)
+    const now = await $.clock.now()
     const target = envs.find(x => x.id === job.environmentId)?.label
 
     if (running) {
@@ -443,7 +495,7 @@ export const register: Register = on => {
           key="sync"
           label="Sync:"
           value={mode}
-          options={[{ value: 'Add', label: 'Add' }, { value: 'ForceSync', label: 'ForceSync' }]}
+          options={[{ value: 'Auto', label: 'Auto (per target)' }, { value: 'Add', label: 'Add' }, { value: 'ForceSync', label: 'ForceSync' }]}
           onSelect={v => update($, syncMode, () => v)}
         />
       </Box>

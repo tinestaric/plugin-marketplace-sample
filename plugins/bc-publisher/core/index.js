@@ -61,7 +61,16 @@ export function createPublisher(io, { workspaceRoot }) {
   /** Merges launch.json targets, local containers and SaaS tenants. Failures of one source never hide the others. */
   async function discoverEnvironments() {
     errors.length = 0
-    const config = await loadConfig().catch(e => (errors.push({ source: 'config', message: errorMessage(e) }), { tenants: [], environments: [] }))
+    let config
+    try {
+      config = await loadConfig()
+    } catch (e) {
+      // The config holds safety settings (isProduction, allowPublish). Without it nothing may be published to, and
+      // the empty answer must not be remembered, so the next call reads the file again.
+      errors.push({ source: 'config', message: `${errorMessage(e)}. No targets are offered until it is fixed.` })
+      environments = null
+      return []
+    }
     const apps = await discoverApps().catch(() => [])
     const launch = []
     for (const app of apps) {
@@ -92,7 +101,7 @@ export function createPublisher(io, { workspaceRoot }) {
   }
 
   async function findEnvironment(id) {
-    return ((environments ??= await discoverEnvironments())).find(e => e.id === id) ?? null
+    return (environments ?? (await discoverEnvironments())).find(e => e.id === id) ?? null
   }
 
   const compileApp = (appPath, opts) => compile(io, appPath, opts)

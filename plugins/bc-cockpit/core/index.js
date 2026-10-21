@@ -104,7 +104,10 @@ export function summarise(board) {
   if (!board) return 'loading…'
   const failed = board.pipelines.filter(p => p.state === 'failed').length
   const waiting = board.pullRequests.filter(p => p.isReviewer && !p.isMine && p.myVote === 0).length
-  return `${failed ? `● ${failed} failed` : '● all green'} · ${waiting} PRs waiting on you · ${board.workItems.length} work items`
+  const problems = board.errors?.length ?? 0
+  // missing results are not good news: an auth or project failure leaves no pipelines at all
+  const head = failed ? `● ${failed} failed` : problems ? '⚠ incomplete' : '● all green'
+  return `${head} · ${waiting} PRs waiting on you · ${board.workItems.length} work items${problems ? ` · ⚠ ${problems} error${problems === 1 ? '' : 's'}` : ''}`
 }
 
 /** Plain-text board for `claude -p` and the agent tool. */

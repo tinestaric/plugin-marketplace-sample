@@ -62,7 +62,10 @@ export async function downloadSymbols(io, appPath, env, credentials, { onOutput,
       failed.push({ ...pkg, error: errorMessage(e) })
       continue
     }
-    if (r.cancelled) break
+    if (r.cancelled) {
+      failed.push({ ...pkg, error: 'cancelled' }) // a cancelled download must never read as success with symbols missing
+      break
+    }
     if (r.code !== 0) {
       failed.push({ ...pkg, error: r.lines.at(-1) ?? `curl exit ${r.code}` })
       onOutput?.(`  ✗ ${r.lines.at(-1) ?? `exit ${r.code}`}`)
