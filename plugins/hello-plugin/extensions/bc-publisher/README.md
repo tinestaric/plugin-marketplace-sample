@@ -75,6 +75,7 @@ Three sources are merged into one list. Each entry is `{ id, label, kind, source
 
 - **Production is shown but can never be published to.** That covers both an Admin API type of `Production` and a launch.json `environmentType: "Production"`.
 - **A SaaS target whose type can't be confirmed by the Admin API is refused.** That includes launch.json targets without `"tenant"`, tenants you can't sign in to, and tenants where you lack admin rights (HTTP 403). The card shows the exact reason.
+- **Not signed in to a tenant?** The target shows **Sign in to <tenant>**. It runs `az login --tenant <id> --allow-no-subscriptions` as a normal job (streamed, cancellable), then refreshes the targets. Afterwards az's previous default account is restored, so tools that use the default account (such as BC Cockpit for Azure DevOps) keep working; BC tokens are always requested per tenant.
 - On-prem: shown, *not supported yet*.
 - The agent (`publisher_publish`):
   - **SaaS sandbox**: the host asks you to confirm every time (`session.ui.confirm`).

@@ -72,6 +72,12 @@ export function runPwsh(script, opts = {}) {
     return spawnStreamed("pwsh", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded], opts);
 }
 
+/** az CLI with streamed output and cancellation (for interactive commands such as `az login`). */
+export function runAzStreamed(args, opts = {}) {
+    const [file, argv] = process.platform === "win32" ? ["cmd.exe", ["/d", "/c", "az", ...args]] : ["az", args];
+    return spawnStreamed(file, argv, opts);
+}
+
 /** az CLI (a .cmd shim on Windows) → stdout. */
 export function runAz(args, { timeoutMs = 60000 } = {}) {
     const [file, argv] = process.platform === "win32" ? ["cmd.exe", ["/d", "/c", "az", ...args]] : ["az", args];

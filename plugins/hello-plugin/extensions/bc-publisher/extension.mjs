@@ -151,6 +151,14 @@ function routesFor(ctx) {
             if (env.kind !== "container") throw new HttpError(400, "Only containers can be restarted");
             return { jobId: ctx.jobs.container("restart", env.id, (h) => ctx.publisher.restartContainer(env.id, h), `Restart ${env.label}`).id };
         },
+        "POST /api/signin": async ({ body }) => {
+            const tenantId = str(body.tenantId, "tenantId").toLowerCase();
+            const tenant = (await ctx.publisher.loadConfig()).tenants.find((t) => t.id === tenantId);
+            if (!tenant) throw new HttpError(400, `Tenant ${tenantId} is not listed in ~/.bc-publisher/config.json`);
+            if ([...ctx.jobs.list()].some((j) => j.kind === "signin" && !j.endedAt)) throw new HttpError(409, "A sign-in is already in progress");
+            const envId = typeof body.environmentId === "string" ? body.environmentId.toLowerCase() : null;
+            return { jobId: ctx.jobs.container("signin", envId, (h) => ctx.publisher.signIn(tenant.id, h), `Sign in to ${tenant.label}`).id };
+        },
         "POST /api/symbols": async ({ body }) => {
             await stateOf(ctx);
             const app = appByPath(ctx, str(body.appPath, "appPath"));
