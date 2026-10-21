@@ -5,7 +5,7 @@ import { discoverApps as scanApps, workspaceFolders } from "./apps.mjs";
 import { compile, findCompiler as locateCompiler, isAppFresh, buildCompileArgs, readAppJson } from "./compiler.mjs";
 import { defaultHome, loadConfig as loadConfigFile, ConfigError } from "./config.mjs";
 import { canPublish, containerDiscoveryScript, fetchSaasEnvironments, mergeEnvironments, parseContainerOutput, readLaunchTargets } from "./environments.mjs";
-import { psq, runAz as defaultRunAz, runPwsh as defaultRunPwsh } from "./proc.mjs";
+import { psq, runAz as defaultRunAz, runAzStreamed as defaultRunAzStreamed, runPwsh as defaultRunPwsh } from "./proc.mjs";
 import { buildErrorPrompt } from "./prompt.mjs";
 import { normaliseMode, publishToContainer, publishToSaas } from "./publish.mjs";
 import { createRunStore } from "./runs.mjs";
@@ -33,6 +33,7 @@ export function createPublisher({
     home = defaultHome(),
     fetch = globalThis.fetch,
     runAz = defaultRunAz,
+    runAzStreamed = defaultRunAzStreamed,
     runPwsh = defaultRunPwsh,
     findCompiler = locateCompiler,
     now = () => Date.now(),
@@ -209,11 +210,35 @@ export function createPublisher({
         return { ok: !r.cancelled && r.code === 0, cancelled: r.cancelled, tail: r.lines.slice(-60) };
     }
 
+    /**
+     * Interactive `az login` for one configured tenant. Afterwards az's previous default account is restored, so
+     * other tools that use the default account (e.g. Azure DevOps) keep their identity; BC tokens are always
+     * requested per tenant, so they keep working.
+     */
+    async function signIn(tenantId, { onOutput, signal } = {}) {
+        const c = await loadConfig();
+        const tenant = c.tenants.find((t) => t.id === String(tenantId ?? "").toLowerCase());
+        if (!tenant) throw new Error(`Tenant "${tenantId}" is not listed in ${c.file}.`);
+        const previous = await runAz(["account", "show", "-o", "json"]).then((o) => JSON.parse(o)).catch(() => null);
+        onOutput?.(`> az login --tenant ${tenant.id} --allow-no-subscriptions`, "info");
+        onOutput?.(`Complete the sign-in for ${tenant.label} in the window or browser that opens…`, "info");
+        const r = await runAzStreamed(["login", "--tenant", tenant.id, "--allow-no-subscriptions", "--scope", `${BC_RESOURCE}/.default`, "-o", "none"], { onOutput, signal, timeoutMs: 10 * 60e3 });
+        if (previous?.id && String(previous.tenantId).toLowerCase() !== tenant.id) {
+            await runAz(["account", "set", "--subscription", previous.id])
+                .then(() => onOutput?.(`Restored az's default account (${previous.user?.name ?? previous.id}).`, "info"))
+                .catch((e) => onOutput?.(`Could not restore az's previous default account: ${e.message}`, "stderr"));
+        }
+        tokens.delete(tenant.id);
+        envCache = null;
+        return { ok: !r.cancelled && r.code === 0, cancelled: r.cancelled, tail: r.lines.slice(-20) };
+    }
+
     return {
         get workspaceRoot() {
             return root;
         },
         loadConfig,
+        signIn,
         workspaceInfo,
         getCompiler,
         discoverApps,

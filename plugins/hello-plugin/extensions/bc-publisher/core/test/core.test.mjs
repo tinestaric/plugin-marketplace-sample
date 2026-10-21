@@ -406,3 +406,31 @@ test("a broken app stops at compile with parsed diagnostics and an agent prompt"
     await rm(ws, { recursive: true, force: true });
     await rm(home, { recursive: true, force: true });
 });
+
+test("signIn runs az login for a configured tenant and restores az's previous default account", async () => {
+    const home = await mkdtemp(join(tmpdir(), "bc-publisher-signin-"));
+    await writeFile(join(home, "config.json"), JSON.stringify({ tenants: [{ id: T, label: "Customer A" }] }));
+    const calls = [];
+    const runAz = async (args) => {
+        calls.push(["az", ...args]);
+        if (args[0] === "account" && args[1] === "show") return JSON.stringify({ id: "home-sub", tenantId: "home-tenant", user: { name: "me@home" } });
+        return "";
+    };
+    const out = [];
+    const runAzStreamed = async (args, { onOutput }) => {
+        calls.push(["az-streamed", ...args]);
+        onOutput?.("A web browser has been opened.", "stdout");
+        return { code: 0, cancelled: false, lines: ["A web browser has been opened."] };
+    };
+    const p = createPublisher({ workspaceRoot: home, home, runAz, runAzStreamed, runPwsh: async () => ({ code: 0, lines: [] }) });
+    const r = await p.signIn(T.toUpperCase(), { onOutput: (l) => out.push(l) });
+    assert.equal(r.ok, true);
+    assert.deepEqual(calls.find((c) => c[0] === "az-streamed"), ["az-streamed", "login", "--tenant", T, "--allow-no-subscriptions", "--scope", "https://api.businesscentral.dynamics.com/.default", "-o", "none"]);
+    assert.deepEqual(calls.at(-1), ["az", "account", "set", "--subscription", "home-sub"], "previous default account restored last");
+    assert.ok(out.some((l) => /Restored az's default account \(me@home\)/.test(l)));
+    await assert.rejects(p.signIn("22222222-2222-2222-2222-222222222222"), /not listed/);
+
+    const cancelled = createPublisher({ workspaceRoot: home, home, runAz, runAzStreamed: async () => ({ code: null, cancelled: true, lines: [] }) });
+    assert.deepEqual(await cancelled.signIn(T), { ok: false, cancelled: true, tail: [] });
+    await rm(home, { recursive: true, force: true });
+});

@@ -1,7 +1,7 @@
 {
   "name": "hello-plugin",
   "description": "Example plugin: one skill, one agent, shared between Copilot and Claude Code, plus the BC Cockpit and BC Publisher canvases (GitHub Copilot only)",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": { "name": "Your Org" },
   "extensions": "extensions"
 }

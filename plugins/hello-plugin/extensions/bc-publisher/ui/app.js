@@ -143,15 +143,20 @@ function envRow(e) {
     if (e.state && e.state !== "unknown") facts.push(esc(e.state));
     if (last) facts.push(`<span class="res ${last.ok ? "ok" : "bad"}" title="${esc(last.appName)} ${esc(last.appVersion)}">${last.ok ? "✓" : "✗"} ${esc(short(last.appName))} · ${time(last.startedAt)}${last.actor === "agent" ? " · agent" : ""}</span>`);
     const pubTitle = !nSel ? "Select apps on the left first" : `Publish ${nSel} app${nSel === 1 ? "" : "s"} to ${e.label} (${S.mode})`;
+    const signingIn = [...S.jobs.values()].some((j) => isLive(j) && j.kind === "signin");
+    const needsSignIn = !can && !e.isProduction && e.kind === "saas" && e.details?.tenant && /token|az login/i.test(e.publishable?.reason ?? "");
     const act = can
         ? `<button type="button" class="btn small primary" data-act="publish" ${!nSel || live ? "disabled" : ""} title="${esc(pubTitle)}">${live ? esc(live.state) + "…" : `Publish${nSel ? ` ${nSel}` : ""}`}</button>`
-        : `<span class="lock" title="${esc(e.publishable?.reason ?? "Publishing unavailable")}">🔒 ${esc(shortReason(e))}</span>`;
+        : needsSignIn
+          ? `<button type="button" class="btn small primary" data-act="signin" ${signingIn ? "disabled" : ""} title="${esc(`Runs az login for ${e.tenant?.label ?? e.details.tenant}, then refreshes. ${e.publishable.reason}`)}">${live ? "Signing in…" : `Sign in to ${esc(e.tenant?.label ?? "tenant")}`}</button>`
+          : `<span class="lock" title="${esc(e.publishable?.reason ?? "Publishing unavailable")}">🔒 ${esc(shortReason(e))}</span>`;
     const restart = e.kind === "container" && (e.state === "running" || e.state === "stopped") ? `<button type="button" class="btn small icon" data-act="restart" ${live ? "disabled" : ""} title="Restart ${esc(e.label)}" aria-label="Restart ${esc(e.label)}">↻</button>` : "";
-    return `<div class="row env-row${can ? "" : " locked"}${e.isProduction ? " prod" : ""} ${S.flash.get(e.id) ?? ""}" data-env="${esc(e.id)}" title="${esc(e.id)}">
+    return `<div class="row env-row${can || needsSignIn ? "" : " locked"}${e.isProduction ? " prod" : ""} ${S.flash.get(e.id) ?? ""}" data-env="${esc(e.id)}" title="${esc(e.id)}">`
+        + `
       <span class="dot ${live ? "busy" : esc(String(e.state ?? "").toLowerCase())}" aria-hidden="true"></span>
       <span class="name">${esc(e.label)}</span>
       <div class="act">${restart}${act}</div>
-      <div class="sub2">${facts.join("<span>·</span>")}</div>
+      <div class="sub2">${facts.join("<span>·</span>")}${needsSignIn ? `<span class="res bad">not signed in</span>` : ""}</div>
     </div>`;
 }
 
@@ -203,6 +208,7 @@ const logHtml = (lines, cls = "") => lines.map((l) => `<span class="${lineClass(
 function resultBox(job) {
     if (job.state === "done") {
         const ok = job.runs.filter((r) => r.ok);
+        if (job.kind === "signin") return `<div class="result ok">✓ Signed in. Targets refreshed.</div>`;
         return ok.length ? `<div class="result ok">✓ ${ok.map((r) => `${esc(short(r.appName))} <span class="muted">${(r.durationMs / 1000).toFixed(0)}s</span>`).join(" · ")}</div>` : "";
     }
     if (job.state !== "failed" && job.state !== "cancelled") return "";
@@ -332,6 +338,9 @@ document.addEventListener("click", async (ev) => {
             await post("/api/publish", { appPaths: list.map((a) => a.path), environmentId: env.id, mode: S.mode }, "Publish");
             break;
         }
+        case "signin":
+            if (await post("/api/signin", { tenantId: env.details.tenant, environmentId: env.id }, "Sign in")) toast(`Complete the sign-in for ${env.tenant?.label ?? "the tenant"} in the window that opens.`);
+            break;
         case "restart":
             if (await confirmDialog("Restart container", `Restart "${env.label}"? Sessions in the container will be disconnected.`, "Restart")) await post("/api/restart", { environmentId: env.id }, "Restart");
             break;
