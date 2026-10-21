@@ -1,0 +1,6 @@
+{ "value": [
+  { "id": 501, "status": "completed", "result": "failed", "sourceBranch": "refs/heads/feature/x", "finishTime": "2026-10-20T10:00:00Z", "definition": { "id": 3, "name": "CI" }, "repository": { "id": "r1", "name": "app" }, "requestedFor": { "id": "someone-else", "displayName": "Bot" } },
+  { "id": 500, "status": "completed", "result": "succeeded", "sourceBranch": "refs/heads/feature/x", "finishTime": "2026-10-19T10:00:00Z", "definition": { "id": 3, "name": "CI" }, "repository": { "id": "r1", "name": "app" }, "requestedFor": { "id": "me-1" } },
+  { "id": 480, "status": "completed", "result": "failed", "sourceBranch": "refs/heads/other", "finishTime": "2026-10-18T10:00:00Z", "definition": { "id": 4, "name": "Nightly" }, "repository": { "id": "r2", "name": "lib" }, "requestedFor": { "id": "u3" } },
+  { "id": 470, "status": "inProgress", "sourceBranch": "refs/heads/dev", "definition": { "id": 5, "name": "Mine" }, "repository": { "id": "r2", "name": "lib" }, "requestedFor": { "id": "me-1" } }
+] }

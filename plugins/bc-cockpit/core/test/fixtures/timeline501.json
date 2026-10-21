@@ -1,0 +1,6 @@
+{ "records": [
+  { "type": "Stage", "name": "Build", "result": "failed" },
+  { "type": "Task", "name": "Compile app", "result": "failed", "order": 3, "log": { "url": "https://log/compile" } },
+  { "type": "Task", "name": "Checkout", "result": "succeeded", "order": 1, "log": { "url": "https://log/checkout" } },
+  { "type": "Task", "name": "Run tests", "result": "failed", "order": 5, "log": { "url": "https://log/tests" } }
+] }
