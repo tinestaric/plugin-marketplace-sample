@@ -1,0 +1,1 @@
+{ "id": 501, "sourceBranch": "refs/heads/feature/x", "sourceVersion": "abcdef1234567890", "definition": { "name": "CI" }, "repository": { "id": "r1", "name": "app" }, "_links": { "web": { "href": "https://dev.azure.com/orgA/ProjA/_build/results?buildId=501" } } }

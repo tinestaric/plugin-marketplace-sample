@@ -1,0 +1,9 @@
+{
+  "name": "bc-cockpit",
+  "version": "0.1.0",
+  "description": "Cross-project Azure DevOps cockpit for Business Central developers: work items, PRs and pipelines in one view, with a one-click hand-off of pipeline failures to the agent.",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Tine Staric"
+  }
+}

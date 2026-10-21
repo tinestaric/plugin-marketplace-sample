@@ -1,0 +1,4 @@
+2026-10-20T09:58:01.1Z Compiling app...
+2026-10-20T09:58:02.4Z src/Sales.Codeunit.al(12,5): error AL0118: The name 'Foo' does not exist in the current context
+2026-10-20T09:58:02.5Z src/Sales.Codeunit.al(30,1): warning AL0432: Obsolete thing
+2026-10-20T09:58:03.0Z Done.

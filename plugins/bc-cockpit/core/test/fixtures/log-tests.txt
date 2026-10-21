@@ -1,0 +1,8 @@
+Running tests
+Codeunit 50100 "Sales Tests"
+Method PostInvoice
+Error Message: Expected 100 but got 90
+Call Stack:
+"Sales Tests"(CodeUnit 50100).PostInvoice line 12
+
+Finished

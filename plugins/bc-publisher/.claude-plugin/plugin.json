@@ -1,0 +1,7 @@
+{
+  "name": "bc-publisher",
+  "version": "0.1.0",
+  "description": "Overview of AL apps and Business Central environments with deterministic compile and publish that the agent can call as tools. Production is read-only.",
+  "author": { "name": "Tine Staric" },
+  "types": "./types/index.d.ts"
+}

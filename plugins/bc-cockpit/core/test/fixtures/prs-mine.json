@@ -1,0 +1,1 @@
+{ "value": [ { "pullRequestId": 7, "title": "My change", "repository": { "id": "r1", "name": "app" }, "sourceRefName": "refs/heads/feature/x", "targetRefName": "refs/heads/main", "isDraft": false, "mergeStatus": "conflicts", "creationDate": "2026-10-02T00:00:00Z", "createdBy": { "id": "me-1" }, "reviewers": [ { "id": "u2", "vote": -5 } ] } ] }
