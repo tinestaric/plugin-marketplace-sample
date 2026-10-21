@@ -37,6 +37,8 @@ function fakeIo({ files = {}, dirs = {}, az = true, pat } = {}) {
     store: { get: async k => store.get(k), set: async (k, v) => void store.set(k, JSON.parse(JSON.stringify(v))) },
     async fetch(url, init = {}) {
       calls.push({ url, init })
+      // the real service rejects fields it does not know (TF51005); the fixtures alone never noticed
+      if (url.includes('wit/wiql') && (init.body ?? '').includes('StateCategory')) return { status: 400, ok: false, text: '{"message":"TF51005: The query references a field that does not exist."}' }
       const hit = routes.find(([re]) => re.test(url))
       if (!hit) return { status: 404, ok: false, text: '' }
       return { status: 200, ok: true, text: hit[1]() }
@@ -253,4 +255,93 @@ test('on Windows az is az.cmd: when it cannot be spawned directly, cmd.exe /c az
   }
   const board = await createCockpit(io).getBoard({ force: true })
   assert.deepEqual(board.errors, [])
+})
+
+test('the work item query uses only fields WIQL knows, and excludes closed states by name', async () => {
+  const { workItemsQuery, CLOSED_STATES } = await import('../azdo.js')
+  const q = workItemsQuery()
+  assert.ok(!q.includes('StateCategory'))
+  assert.ok(q.includes('[System.AssignedTo] = @Me'))
+  for (const state of CLOSED_STATES) assert.ok(q.includes("'" + state + "'"))
+  assert.ok(!q.includes('TeamProject'), 'all projects when none are named')
+  assert.ok(workItemsQuery({ closedStates: ['Shipped'] }).includes("NOT IN ('Shipped')"), 'closedStates in the config override the defaults')
+  assert.ok(workItemsQuery({ projects: ["Cust'omer A", 'B'] }).includes("[System.TeamProject] IN ('Cust''omer A', 'B')"))
+})
+
+test('work items are fetched for the configured projects only', async () => {
+  const cfg = { ...CONFIG, organisations: [{ name: 'orgA', projects: ['ProjA'] }] }
+  const io = fakeIo({ files: { '/home/me/.bc-cockpit/config.json': JSON.stringify(cfg) } })
+  const board = await createCockpit(io).getBoard({ force: true })
+  assert.deepEqual(board.errors, [])
+  assert.ok(board.workItems.length > 0, 'the query is accepted and returns items')
+  const wiql = io.calls.find(c => c.url?.includes('wit/wiql'))
+  assert.ok(JSON.parse(wiql.init.body).query.includes("[System.TeamProject] IN ('ProjA')"))
+})
+
+test('a PR-validation build on refs/pull/<id>/merge counts as mine, whoever requested it', () => {
+  const build = { project: 'P', definitionId: 1, repoId: 'r', branch: 'refs/pull/7/merge', requestedForId: 'service', state: 'failed', buildId: 1 }
+  const prBranches = new Set(['P/r/feature/x', 'P/r/refs/pull/7/merge'])
+  assert.equal(filterPipelines([build], { scope: 'mine', meId: 'me', prBranches }).length, 1)
+  assert.equal(filterPipelines([build], { scope: 'mine', meId: 'me', prBranches: new Set(['P/r/feature/x']) }).length, 0)
+})
+
+test('missing results are never reported as all green', () => {
+  const board = { workItems: [], pullRequests: [], pipelines: [], errors: [{ org: 'a', scope: 'sign-in', message: 'x' }] }
+  assert.equal(summarise(board), '⚠ incomplete · 0 PRs waiting on you · 0 work items · ⚠ 1 error')
+  assert.ok(summarise({ ...board, errors: [] }).startsWith('● all green'))
+  assert.ok(summarise({ ...board, pipelines: [{ state: 'failed' }] }).startsWith('● 1 failed'))
+})
+
+test('a config.json with comments (as people and other tools write it) loads', async () => {
+  const text = ['// BC Cockpit configuration', '{', '  // orgs', '  "organisations": [ { "name": "orgA", "projects": "*" } ], /* x */', '  "closedStates": ["Done"],', '}'].join('\n')
+  const io = fakeIo({ files: { '/home/me/.bc-cockpit/config.json': text } })
+  const c = await createCockpit(io).loadConfig()
+  assert.equal(c.organisations[0].name, 'orgA')
+  assert.deepEqual(c.closedStates, ['Done'])
+})
+
+// Lines as a real pipeline wrote them (self-hosted Windows agent, PowerShell task)
+const REAL_BUILD_LOG = [
+  '2026-10-21T12:14:23.2237599Z ##[section]Starting: Compile AL app',
+  '2026-10-21T12:14:23.2283209Z Task         : PowerShell',
+  '2026-10-21T12:14:28.9278963Z Compiling Cockpit Demo 1.0.0.0',
+  "2026-10-21T12:14:28.9624743Z src/DemoHello.Codeunit.al(5,9): error AL0118: The name 'Foo' does not exist in the current context.",
+  "2026-10-21T12:14:28.9793630Z ##[error]src/DemoHello.Codeunit.al(5,9): error : AL0118 The name 'Foo' does not exist in the current context.",
+  "2026-10-21T12:14:29.2517961Z ##[error]PowerShell exited with code '1'.",
+  '2026-10-21T12:14:29.3788741Z ##[section]Finishing: Compile AL app',
+]
+const REAL_TEST_LOG = [
+  '2026-10-21T12:14:01.5955463Z Running tests',
+  '2026-10-21T12:14:01.6516686Z Codeunit 50100 "Demo Tests"',
+  '2026-10-21T12:14:01.6556139Z Method TestGreeting',
+  "2026-10-21T12:14:01.6592156Z Error Message: Expected 'Hello from BC' but got 'Hi from broken'",
+  '2026-10-21T12:14:01.6635154Z Call Stack:',
+  '2026-10-21T12:14:01.6745511Z "Demo Tests"(CodeUnit 50100).TestGreeting line 5',
+  "2026-10-21T12:14:01.9172625Z ##[error]PowerShell exited with code '1'.",
+  '2026-10-21T12:14:02.0685231Z ##[section]Finishing: Run AL tests',
+]
+
+test('the log endpoint\'s JSON envelope is unwrapped to lines before trimming', async () => {
+  const { logText } = await import('../failure.js')
+  const envelope = JSON.stringify({ count: REAL_BUILD_LOG.length, value: REAL_BUILD_LOG })
+  assert.equal(logText(envelope), REAL_BUILD_LOG.join('\n'))
+  assert.equal(logText('plain text'), 'plain text', 'plain logs pass through')
+  const trimmed = trimStepLog(logText(envelope))
+  assert.equal(trimmed, "src/DemoHello.Codeunit.al(5,9): error AL0118: The name 'Foo' does not exist in the current context.")
+})
+
+test('a real test failure block is kept whole and stops at the pipeline markers', () => {
+  const trimmed = trimStepLog(REAL_TEST_LOG.join('\n'))
+  assert.equal(trimmed.split('\n').length, 5)
+  assert.ok(trimmed.startsWith('Codeunit 50100 "Demo Tests"'))
+  assert.ok(trimmed.includes("Expected 'Hello from BC' but got 'Hi from broken'"))
+  assert.ok(trimmed.includes('TestGreeting line 5'))
+  assert.ok(!trimmed.includes('##['))
+})
+
+test('build logs are requested as plain text', async () => {
+  const io = fakeIo(withConfig({ dirs: { '/repos': [] } }))
+  await createCockpit(io).getFailureDetails({ org: 'orgA', project: 'ProjA', buildId: 501 })
+  const logCall = io.calls.find(c => c.url?.includes('log/compile'))
+  assert.equal(logCall.init.headers.Accept, 'text/plain')
 })

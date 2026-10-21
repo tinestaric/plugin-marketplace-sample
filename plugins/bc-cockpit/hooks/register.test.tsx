@@ -71,7 +71,7 @@ test('the band summarises the board and offers a hotkey per failed pipeline', as
 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await ui.find({ type: 'Text', text: /1 failed · 1 PRs waiting on you · 1 work items/ }))?.text).toBeTruthy()
-  expect(await ui.find({ type: 'Button', key: 'fail-9' })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', key: 'fail-orgA/ProjA/9' })).toBeTruthy()
   await ui.unmount()
 })
 
@@ -83,7 +83,7 @@ test('Fix with agent is not offered without a local clone', async ($, on) => {
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /Fix with agent unavailable/ })).toBeTruthy()
-  expect(await ui.find({ type: 'Button', key: 'fix-9' })).toBeFalsy()
+  expect(await ui.find({ type: 'Button', key: 'fix-orgA/ProjA/9' })).toBeFalsy()
   await ui.unmount()
 })
 

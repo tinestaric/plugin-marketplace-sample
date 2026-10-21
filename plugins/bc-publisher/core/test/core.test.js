@@ -184,7 +184,7 @@ test('environments merge launch.json, containers and SaaS into one list with pro
 
   assert.equal(byId[`saas:${TENANT.id}/production`].isProduction, true)
   assert.equal(byId[`saas:${TENANT.id}/weird`].isProduction, true, 'undeterminable type is treated as production')
-  assert.equal(byId['onprem:onprem1/bc14'].kind, 'onprem')
+  assert.equal(byId['onprem:onprem1:7149/bc14'].kind, 'onprem')
   assert.equal(envs.at(-1).isProduction, true, 'production listed last')
   assert.match(environmentsToText(envs), /PRODUCTION: read-only/)
 })
@@ -345,7 +345,7 @@ test('production and undeterminable targets are refused, with a recorded run and
 })
 
 test('an on-prem server needs allowPublish, then publishes with its own server, instance, port and auth', async () => {
-  const id = 'onprem:onprem1/bc14'
+  const id = 'onprem:onprem1:7149/bc14'
   const io = fakeIo({ files: workspace(), runs: RUNS, script: okScript })
   const blocked = await createPublisher(io, { workspaceRoot: WS }).publishApp(`${WS}/base`, id)
   assert.equal(blocked.stage, 'blocked')
@@ -516,4 +516,62 @@ test('a config.json with comments and environments keyed by id (written by anoth
   const c = await createPublisher(io, { workspaceRoot: WS }).loadConfig()
   assert.deepEqual(c.environments, [{ id: 'container:bc24-w1', agentMayPublish: true }])
   assert.equal(c.tenants[0].id, 't')
+})
+
+// ── from the pull request review ───────────────────────────────────────────
+
+test('the same server on another port or tenant is another target, with its own permissions', () => {
+  const profile = (name, extra) => ({ type: 'al', request: 'launch', name, server: 'http://box', serverInstance: 'BC', authentication: 'Windows', ...extra })
+  const launch = parseLaunch(JSON.stringify({ configurations: [profile('A', { port: 7049 }), profile('B', { port: 7149 }), profile('C', { port: 7049, tenant: 'other' })] }), 'launch.json')
+  assert.deepEqual(launch.map(l => l.id), ['onprem:box:7049/bc', 'onprem:box:7149/bc', 'onprem:box:7049/bc?other'])
+  assert.equal(new Set(launch.map(l => l.id)).size, 3)
+  assert.equal(mergeEnvironments(launch, [], [], []).length, 3, 'none is folded into another')
+})
+
+test('a launch profile on a container host but another endpoint does not become the container', () => {
+  const containers = parseContainers(CONTAINERS_TSV)
+  const profile = extra => parseLaunch(JSON.stringify({ configurations: [{ type: 'al', name: 'p', server: 'http://bc24-w1', serverInstance: 'BC', authentication: 'UserPassword', ...extra }] }), 'launch.json')
+  const own = mergeEnvironments(profile({ port: 7049 }), containers, [], [])
+  assert.deepEqual(own.map(e => e.id), ['container:bc24-w1'])
+  const other = mergeEnvironments(profile({ port: 7149 }), containers, [], [])
+  assert.deepEqual(other.map(e => e.id).sort(), ['container:bc24-w1', 'onprem:bc24-w1:7149/bc'])
+  assert.equal(other.find(e => e.kind === 'container').details.port, 7049, 'the container keeps its own connection details')
+})
+
+test('an unreadable config fails closed: no targets, nothing published, and it recovers when fixed', async () => {
+  const files = workspace({ [`${HOME}/.bc-publisher/config.json`]: '{ "environments": [ { "id": "container:bc24-w1", "isProduction": true ' })
+  const io = fakeIo({ files, runs: RUNS, script: okScript })
+  const p = createPublisher(io, { workspaceRoot: WS })
+  assert.deepEqual(await p.discoverEnvironments(), [])
+  assert.ok(p.errors.some(e => e.source === 'config' && e.message.includes('No targets are offered')))
+
+  const run = await p.publishApp(`${WS}/base`, 'container:bc24-w1')
+  assert.equal(run.stage, 'blocked')
+  assert.equal(io.spawned.length, 0, 'the broken config did not turn a production container into a publish target')
+
+  io.files[`${HOME}/.bc-publisher/config.json`] = JSON.stringify({ environments: [{ id: 'container:bc24-w1', isProduction: true }] })
+  assert.equal((await p.publishApp(`${WS}/base`, 'container:bc24-w1')).error.includes('production'), true, 'the fixed config is read again, restriction intact')
+})
+
+test('the fix prompt carries the error of a run that produced no diagnostics or output', () => {
+  const prompt = buildErrorPrompt({ appName: 'Base', appVersion: '1.0.0.0', environmentId: 'container:x', environmentLabel: 'x', stage: 'compiling', diagnostics: [], tail: [], error: 'No AL compiler found. Install the AL tool: dotnet tool install -g Microsoft.Dynamics.BusinessCentral.Development.Tools' })
+  assert.ok(prompt.includes('dotnet tool install -g Microsoft.Dynamics.BusinessCentral.Development.Tools'))
+  assert.ok(!prompt.includes('(no output captured)'))
+})
+
+test('a cancelled symbol download is a failure, not a success', async () => {
+  const files = workspace({ [`${WS}/ext/app.json`]: JSON.stringify({ id: 'e', name: 'Ext', publisher: 'Acme', version: '1.0.0.0', platform: '28.0.0.0', application: '28.0.0.0' }) })
+  const io = fakeIo({ files, runs: { ...RUNS, GetPackageManifest: { stdout: '{"dependencies":[]}' } }, script: () => ({ lines: [], code: 0 }) })
+  io.credentials = async () => ({ user: 'admin', password: 'pw' })
+  const handle = {}
+  const spawn = io.spawn.bind(io)
+  let curls = 0
+  io.spawn = (argv, init) => {
+    const it = spawn(argv, init)
+    if (argv[0] !== 'curl.exe' || ++curls < 2) return it
+    return { next: async () => (await handle.cancel(), { done: true, value: { code: null, signal: null } }), return: async () => ({ done: true, value: {} }) }
+  }
+  const r = await createPublisher(io, { workspaceRoot: WS }).downloadSymbols(`${WS}/ext`, 'container:bc24-w1', { handle })
+  assert.equal(r.ok, false)
+  assert.ok(r.downloaded.length >= 1 && r.failed.some(f => f.error === 'cancelled'))
 })

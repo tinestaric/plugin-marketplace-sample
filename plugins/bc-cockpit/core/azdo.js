@@ -5,7 +5,8 @@ const API = '7.1'
 /** Thin read-only Azure DevOps REST client. The only writes are WIQL/batch POSTs, which are queries. */
 export function createClient(io, auth) {
   async function request(url, { method = 'GET', body, raw = false } = {}) {
-    const headers = { Authorization: await auth.authorization(), Accept: 'application/json' }
+    // build logs come back as a JSON envelope unless plain text is asked for
+    const headers = { Authorization: await auth.authorization(), Accept: raw ? 'text/plain' : 'application/json' }
     if (body !== undefined) headers['Content-Type'] = 'application/json'
     const res = await io.fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
     if (res.status === 401 || res.status === 203) {
@@ -39,12 +40,8 @@ export function createClient(io, auth) {
         skip += 100
       }
     },
-    async workItems(org) {
-      const wiql = {
-        query:
-          "SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me " +
-          "AND [System.StateCategory] NOT IN ('Completed', 'Removed') ORDER BY [System.ChangedDate] DESC",
-      }
+    async workItems(org, { projects, closedStates } = {}) {
+      const wiql = { query: workItemsQuery({ projects, closedStates }) }
       const res = await request(q(`https://dev.azure.com/${e(org)}/_apis/wit/wiql`, '$top=200'), { method: 'POST', body: wiql })
       const ids = (res.workItems ?? []).map(w => w.id)
       const items = []
@@ -105,6 +102,19 @@ export function normaliseWorkItem(org, w) {
     changed: f['System.ChangedDate'],
     url: `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_workitems/edit/${w.id}`,
   }
+}
+
+// System.StateCategory is not a queryable WIQL field (TF51005), so closed work is excluded by state name.
+// The names cover the Basic, Agile, Scrum and CMMI processes; "closedStates" in the config overrides them.
+export const CLOSED_STATES = ['Done', 'Closed', 'Removed', 'Completed', 'Cut']
+const lit = s => `'${String(s).replace(/'/g, "''")}'` // a WIQL string literal: quotes doubled
+
+export function workItemsQuery({ projects, closedStates } = {}) {
+  const closed = (closedStates?.length ? closedStates : CLOSED_STATES).map(lit).join(', ')
+  let where = `[System.AssignedTo] = @Me AND [System.State] NOT IN (${closed})`
+  // only the projects the config asks for: others must neither show up nor use the 200-item limit
+  if (Array.isArray(projects) && projects.length) where += ` AND [System.TeamProject] IN (${projects.map(lit).join(', ')})`
+  return `SELECT [System.Id] FROM WorkItems WHERE ${where} ORDER BY [System.ChangedDate] DESC`
 }
 
 /** Overall vote: the worst reviewer vote wins (rejected < waiting < none < approved-with-suggestions < approved). */

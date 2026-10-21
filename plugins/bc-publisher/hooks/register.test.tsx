@@ -26,13 +26,16 @@ type World = { spawned: { argv: string[]; input?: string }[]; submitted: string[
  * A workspace with one app, a running container (agentMayPublish configurable), a SaaS sandbox and production.
  * `compileOutput` is what `altool compile` prints; `compileCode` its exit status.
  */
-function world(on: any, opts: { agentMayPublish?: boolean; compileOutput?: string; compileCode?: number; ask?: string; isPlaced?: boolean } = {}): World {
+function world(on: any, opts: { agentMayPublish?: boolean; compileOutput?: string; compileCode?: number; ask?: string; isPlaced?: boolean; forceSyncLaunch?: boolean } = {}): World {
   const w: World = { spawned: [], submitted: [], files: {} }
-  const { agentMayPublish = true, compileOutput = 'Compiled', compileCode = 0, ask = 'Publish', isPlaced = true } = opts
+  const { agentMayPublish = true, compileOutput = 'Compiled', compileCode = 0, ask = 'Publish', isPlaced = true, forceSyncLaunch = false } = opts
   w.files = {
     [`${APP}/app.json`]: JSON.stringify({ id: 'b', name: 'Base', publisher: 'Acme', version: '1.0.0.0', dependencies: [] }),
     [`${APP}/.alpackages/x.app`]: 'x',
     [`${HOME}/.bc-publisher/config.json`]: JSON.stringify({ tenants: [{ id: TENANT, label: 'Customer A' }], environments: agentMayPublish ? [{ id: 'container:bc24-w1', agentMayPublish: true }] : [] }),
+    ...(forceSyncLaunch
+      ? { [`${APP}/.vscode/launch.json`]: JSON.stringify({ configurations: [{ type: 'al', name: 'c', server: 'http://bc24-w1', serverInstance: 'BC', port: 7049, authentication: 'UserPassword', schemaUpdateMode: 'ForceSync' }] }) }
+      : {}),
   }
   mock.clock(on)
   mock.env(on, { USERPROFILE: HOME })
@@ -60,7 +63,7 @@ function world(on: any, opts: { agentMayPublish?: boolean; compileOutput?: strin
   on('process.run', (_: any, e: any) => {
     const cmd = (e.argv as string[]).join(' ')
     if (/--version/.test(cmd)) return { value: { exitCode: 0, stdout: '18.0.41+abc\n', stderr: '' } }
-    if (/^docker ps/.test(cmd)) return { value: { exitCode: 0, stdout: 'bc24-w1\trunning\tDynamics\t24.3.0.1\tw1\n', stderr: '' } }
+    if (/^docker ps/.test(cmd)) return { value: { exitCode: 0, stdout: 'bc24-w1\trunning\tDynamics SMB\t\t24.3.0.1\tw1\n', stderr: '' } }
     if (/get-access-token/.test(cmd)) return { value: { exitCode: 0, stdout: 'tok\n', stderr: '' } }
     return { value: { exitCode: 1, stdout: '', stderr: 'not available' } }
   })
@@ -224,4 +227,92 @@ test('/publish returns apps and environments as text where nothing is drawn', as
   expect(ran.text).toMatch(/Base 1\.0\.0\.0/)
   expect(ran.text).toMatch(/container:bc24-w1/)
   expect(ran.text).toMatch(/PRODUCTION: read-only/)
+})
+
+test('the band announces the mod, quietly, where there are AL apps', async ($, on) => {
+  world(on)
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await start($)
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /BC Publisher · 1 app · 3 targets \(1 read-only\)/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', key: 'open' })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('the band stays out of the way where there are no AL apps', async ($, on) => {
+  const w = world(on)
+  delete w.files[`${APP}/app.json`]
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  await start($)
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /engine/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /BC Publisher/ })).toBeFalsy()
+  await ui.unmount()
+})
+
+test('the guard also catches the publisher\'s own engine, al/altool publishapp', async ($, on) => {
+  world(on)
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('tool.call', { tool: 'Bash' }, () => ({ result: {} }))
+  on('tool.call', { tool: 'PowerShell' }, () => ({ result: {} }))
+  await start($)
+
+  const bare: any = await $.tool.call({ tool: 'Bash', command: 'al publishapp ./x.app --server http://bc24-w1 --serverinstance BC' })
+  expect(bare.deny).toMatch(/publisher_publish/)
+  const quoted: any = await $.tool.call({ tool: 'PowerShell', command: '& "C:/Users/me/.dotnet/tools/al.exe" publishapp x.app --environmenttype Sandbox --environmentname dev' })
+  expect(quoted.deny).toMatch(/publisher_publish/)
+  const prod: any = await $.tool.call({ tool: 'Bash', command: 'altool publishapp x.app --environmenttype Production --environmentname Production --tenant t' })
+  expect(prod.deny).toMatch(/production/i)
+  const unknown: any = await $.tool.call({ tool: 'Bash', command: 'al publishapp x.app --environmenttype Sandbox --environmentname not-in-the-list' })
+  expect(unknown.deny).toMatch(/production|cannot be determined/i)
+  const compile: any = await $.tool.call({ tool: 'Bash', command: 'al compile /project:.' })
+  expect(compile.deny).toBeUndefined()
+})
+
+test('/publish accepts quoted app names and waits for the first discovery', async ($, on) => {
+  const w = world(on)
+  w.files[`${APP}/app.json`] = JSON.stringify({ id: 'b', name: 'Sales App', publisher: 'Acme', version: '1.0.0.0', dependencies: [] })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  // no refresh first: the command has to wait for the discovery that session start began
+  await $.session.start({ cwd: WS, surface: 'terminal', isInteractive: false })
+
+  const ran: any = await $.command.run({ command: 'publish', args: 'compile "Sales App"' })
+  expect(JSON.parse(ran.text).ok).toBe(true)
+  const published: any = await $.command.run({ command: 'publish', args: 'publish "Sales App" container:bc24-w1' })
+  expect(JSON.parse(published.text)[0].ok).toBe(true)
+})
+
+test('a target\'s own sync mode applies unless somebody chose one', async ($, on) => {
+  const w = world(on, { forceSyncLaunch: true })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await start($)
+
+  await call($, 'publish', { appPath: 'Base', environmentId: 'container:bc24-w1' })
+  const first = w.spawned.filter(s => s.argv[1] === 'publishapp').at(-1)!
+  expect(first.argv[first.argv.indexOf('--schemaupdatemode') + 1]).toBe('ForceSync') // launch.json's, not a blanket "Add"
+
+  await call($, 'publish', { appPath: 'Base', environmentId: 'container:bc24-w1', mode: 'Add' })
+  const second = w.spawned.filter(s => s.argv[1] === 'publishapp').at(-1)!
+  expect(second.argv[second.argv.indexOf('--schemaupdatemode') + 1]).toBe('Synchronize') // asked for explicitly
+})
+
+test('the apps the list tool shows are the ones compile accepts', async ($, on) => {
+  const w = world(on)
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await start($)
+  // a second app appears after the session started
+  w.files[`${WS}/late/app.json`] = JSON.stringify({ id: 'l', name: 'Late', publisher: 'Acme', version: '1.0.0.0', dependencies: [] })
+  w.files[`${WS}/late/.alpackages/x.app`] = 'x'
+
+  const before: any = await call($, 'compile', { appPath: 'Late' })
+  expect(before.result.isError).toBe(true)
+  await call($, 'list_apps', {})
+  const after: any = await call($, 'compile', { appPath: 'Late' })
+  expect(after.result.isError).toBe(false)
 })

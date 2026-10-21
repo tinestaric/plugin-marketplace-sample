@@ -26,7 +26,7 @@ Prerequisites: Node-free at runtime (the mod runs inside Claude Code), and eithe
 
 ## Configure
 
-`~/.bc-cockpit/config.json` is created with an example on first `/cockpit`. It never holds secrets.
+`~/.bc-cockpit/config.json` is created with an example on first `/cockpit`. It never holds secrets, and may contain `//` comments.
 
 ```json
 {
@@ -41,7 +41,9 @@ Prerequisites: Node-free at runtime (the mod runs inside Claude Code), and eithe
 ```
 
 - `"projects": "*"` discovers every project in the organisation.
-- `pipelineScope`: `"mine"` = runs requested by me or on source branches of my open PRs; `"all"` = latest run of every definition.
+- `pipelineScope`: `"mine"` = runs requested by me, or on a source branch or `refs/pull/<id>/merge` of my open PRs; `"all"` = latest run of every definition.
+- `closedStates` (optional): work item states treated as finished. Default `["Done", "Closed", "Removed", "Completed", "Cut"]`; WIQL cannot filter on state *category*, so it is by name. Work items are fetched only for the projects you list.
+- The band says `⚠ incomplete` (never `all green`) when any organisation or project failed to load.
 - `repoRoots`: folders whose direct children are git clones. Used to find the local clone for **Fix with agent**; nothing is ever cloned automatically.
 
 Authentication: `az account get-access-token` for the Azure DevOps resource first, then `AZDO_PAT` (Basic auth). Tokens are held in memory only. If neither works the cockpit shows the exact command to run.

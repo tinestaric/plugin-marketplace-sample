@@ -1,4 +1,4 @@
-import { joinPath } from './util.js'
+import { joinPath, parseJsonc } from './util.js'
 
 // JSON has no comments, so the example carries its explanations as `_comment` keys.
 export const EXAMPLE_CONFIG = {
@@ -28,7 +28,8 @@ export async function loadConfig(io) {
   }
   let parsed
   try {
-    parsed = JSON.parse(await io.fs.read(path))
+    // JSONC: people (and other tools) put comments in this file
+    parsed = parseJsonc(await io.fs.read(path))
   } catch (e) {
     throw new Error(`Cannot parse ${path}: ${e.message}`)
   }
