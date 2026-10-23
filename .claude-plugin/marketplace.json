@@ -19,6 +19,11 @@
       "name": "bc-publisher",
       "source": "./plugins/bc-publisher",
       "description": "Mod: AL apps and BC environments overview with deterministic compile and publish the agent can also call as tools; production is read-only"
+    },
+    {
+      "name": "dev-workflow",
+      "source": "./plugins/dev-workflow",
+      "description": "Mod: pane that guides the spec → design → implement → iterate → review → PR loop with buttons, linked to the git branch"
     }
   ]
 }

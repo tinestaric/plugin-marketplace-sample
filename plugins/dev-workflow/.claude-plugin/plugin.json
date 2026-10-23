@@ -1,0 +1,6 @@
+{
+  "name": "dev-workflow",
+  "version": "0.1.0",
+  "description": "A pane that guides the spec → design → implement → iterate → review → PR loop with buttons instead of hoping the right skill fires.",
+  "types": "./types/index.d.ts"
+}
