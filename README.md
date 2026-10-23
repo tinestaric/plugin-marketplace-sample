@@ -10,6 +10,7 @@ your own skills/agents and this structure carries over unchanged.
 ```
 .github/plugin/marketplace.json      Copilot marketplace manifest
 .claude-plugin/marketplace.json      Claude marketplace manifest (identical content)
+plugins/dev-workflow/               Claude Code mod: /dev-workflow pane that guides the spec → PR loop with buttons
 plugins/hello-plugin/
   plugin.json                       Copilot plugin manifest (plugin root)
   .claude-plugin/plugin.json        Claude plugin manifest
